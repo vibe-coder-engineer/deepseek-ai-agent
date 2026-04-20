@@ -51,7 +51,7 @@ public class DeepSeekChatPage {
 
 
     public void sendPromptWithEnter(String prompt) {
-       // insertPrompt(prompt);
+        // insertPrompt(prompt);
         setPromptViaInnerHTML(prompt);
         try {
             Thread.sleep(3000L);
@@ -161,7 +161,6 @@ public class DeepSeekChatPage {
     }
 
 
-
     public void waitForResponseComplete() {
         System.out.println("⏳ Ожидание завершения генерации ответа...");
 
@@ -170,6 +169,7 @@ public class DeepSeekChatPage {
             browserManager.getWait().until(ExpectedConditions.presenceOfElementLocated(
                     By.xpath("//button[@role='button' and not(@disabled)]//span[contains(text(), 'Копировать')]")
             ));
+
 
             System.out.println("✅ Кнопка 'Копировать' стала активной - ответ полностью сгенерирован");
         } catch (Exception e) {
@@ -203,6 +203,41 @@ public class DeepSeekChatPage {
         }
     }
 
+    public boolean isContinueButtonVisible() {
+        try {
+            WebElement continueButton = browserManager.getDriver().findElement(
+                    By.xpath("//button[@role='button' and @aria-disabled='false']//span[text()='Продолжить']/ancestor::button[@role='button']")
+            );
+            return continueButton.isDisplayed() && continueButton.isEnabled();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public void clickContinueButton() {
+        try {
+            WebElement continueButton = browserManager.getDriver().findElement(
+                    By.xpath("//button[@role='button' and @aria-disabled='false']//span[text()='Продолжить']/ancestor::button[@role='button']")
+            );
+
+            JavascriptExecutor js = (JavascriptExecutor) browserManager.getDriver();
+            js.executeScript("arguments[0].scrollIntoView(true);", continueButton);
+            js.executeScript("arguments[0].click();", continueButton);
+
+            System.out.println("✅ Кнопка 'Продолжить' нажата, ждем продолжения генерации...");
+
+            // Небольшая задержка после клика
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+        } catch (Exception e) {
+            System.out.println("⚠️ Не удалось нажать кнопку 'Продолжить': " + e.getMessage());
+        }
+    }
+
     // Ожидание появления первого символа ответа
     public void waitForResponseStarted() {
         System.out.println("⏳ Ожидание начала ответа...");
@@ -212,6 +247,14 @@ public class DeepSeekChatPage {
             browserManager.getWait().until(ExpectedConditions.presenceOfElementLocated(
                     By.xpath("//div[contains(@class, 'ds-markdown')]")
             ));
+
+            Thread.sleep(200);
+
+            if (isContinueButtonVisible()) {
+                clickContinueButton();
+                waitForResponseComplete();
+            }
+
 
             System.out.println("✅ Ответ начал появляться");
 
