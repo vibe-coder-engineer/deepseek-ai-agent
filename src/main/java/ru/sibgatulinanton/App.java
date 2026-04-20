@@ -6,6 +6,7 @@ import ru.sibgatulinanton.deepseek.BrowserDriverManager;
 import ru.sibgatulinanton.deepseek.DeepSeekChatPage;
 import ru.sibgatulinanton.lang.Language;
 import ru.sibgatulinanton.os.OSUtils;
+import ru.sibgatulinanton.os.cmd.CompleteCmd;
 import ru.sibgatulinanton.prompts.PromptLoader;
 
 import java.time.Duration;
@@ -15,6 +16,9 @@ import java.time.Duration;
  */
 public class App {
     public static void main(String[] args) {
+
+        String currentDir = System.getProperty("user.dir");
+
         PromptLoader promptLoader = new PromptLoader();
 
         BrowserDriverManager manager = new BrowserDriverManager();
@@ -40,31 +44,58 @@ public class App {
         String prompt = promptLoader.getPrompt(Language.RU,
                         "first_prompt")
                 .replaceAll("\\{TASK}", "Напиши сервис на java spring boot с авторизацией и регистрацией")
-                .replaceAll("\\{OS}", OSUtils.getOperatingSystemType()
-                        .name());
+                .replaceAll("\\{OS}", OSUtils.getOperatingSystemType().name())
+                .replaceAll("\\{WORKSPACE}", currentDir);
 
-        String response = deepSeekPage.askDeepSeek(prompt);
+        boolean isEnd = false;
+        boolean promptIsExist = false;
+        while (!isEnd) {
+            promptIsExist = false;
+            String response = deepSeekPage.askDeepSeek(prompt)
+                    .replace("json","")
+                    .replace("Копировать", "")
+                    .replace("Скачать", "")
+                    .trim();
 
-        JSONObject jsonObject = new JSONObject(response);
+            JSONObject jsonObject = new JSONObject(response);
 
-        JSONArray operations = jsonObject.getJSONArray("operations");
-        for (int i = 0; i < operations.length(); i++) {
-            JSONObject operation = operations.getJSONObject(i);
-            String type = operation.getString("type");
-            String data = operation.getString("data");
-            String content = operation.has("content") ? operation.getString("content") : null;
+            JSONArray operations = jsonObject.getJSONArray("operations");
+            for (int i = 0; i < operations.length(); i++) {
+                JSONObject operation = operations.getJSONObject(i);
+                String type = operation.getString("type");
+                String data = operation.getString("data");
+                String content = operation.has("content") ? operation.getString("content") : null;
 
-            if ("END".equals(type)) {
-                System.out.println(content);
-            } else if ("CMD".equals(type)) {
+                if ("END".equals(type)) {
+                    isEnd = true;
+                    System.out.println(content);
+                } else if ("CMD".equals(type)) {
+                    if (content != null) {
+                        data = data.replace("%s", content);
+                    }
 
-            } else if ("CMD_WAIT".equals(type)) {
+                    System.out.println(data);
+                    String cmd = CompleteCmd.executeCommand(data);
+                    System.out.println(cmd);
 
-            } else if ("TEXT".equals(type)) {
-                System.out.println(data);
+                } else if ("CMD_WAIT".equals(type)) {
+                    if (content != null) {
+                        data = data.replace("%s", content);
+                    }
+
+                    System.out.println(data);
+                    String cmd = CompleteCmd.executeCommand(data);
+                    System.out.println(cmd);
+                    prompt = cmd;
+                    promptIsExist = true;
+                } else if ("TEXT".equals(type)) {
+                    System.out.println(data);
+                }
+            }
+            if (!promptIsExist) {
+                prompt = "продолжай";
             }
         }
-
         manager.driverWait(100);
 
         manager.quit();
