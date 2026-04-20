@@ -14,6 +14,12 @@ import java.util.Map;
 
 public class CompleteCmd {
 
+    private static PowerShell powerShell;
+
+    static {
+        powerShell = PowerShell.openSession();
+    }
+
     public static String executeCommand(String command) {
         StringBuilder output = new StringBuilder();
 
@@ -81,21 +87,13 @@ public class CompleteCmd {
     }
 
     public static String executePowerShell(String command) {
-        try (PowerShell powerShell = PowerShell.openSession()) {
-            //Execute a command in PowerShell session
+        try {
             PowerShellResponse response = powerShell.executeCommand(command);
-
-            //Print results
             return response.getCommandOutput();
-        } catch (PowerShellNotAvailableException ex) {
-            //Handle error when PowerShell is not available in the system
-            //Maybe try in another way?
-            throw new RuntimeException(ex);
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
         }
     }
-
-
-
 
 
     public static void main(String[] args) {

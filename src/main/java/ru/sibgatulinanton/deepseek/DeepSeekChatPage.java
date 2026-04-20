@@ -160,17 +160,18 @@ public class DeepSeekChatPage {
         return getResponse();
     }
 
+
+
     public void waitForResponseComplete() {
         System.out.println("⏳ Ожидание завершения генерации ответа...");
 
         try {
-            // Ждем, когда кнопка снова станет стрелкой (не квадратом)
+            // Ждем, когда кнопка "Копировать" станет активной (без атрибута disabled)
             browserManager.getWait().until(ExpectedConditions.presenceOfElementLocated(
-                    By.xpath("//div[@style='width: fit-content;']/div[@role='button']//path[contains(@d, 'M8.3125 0.981587')]")
+                    By.xpath("//button[@role='button' and not(@disabled)]//span[contains(text(), 'Копировать')]")
             ));
 
-            System.out.println("✅ Генерация ответа завершена, кнопка снова стала стрелкой");
-
+            System.out.println("✅ Кнопка 'Копировать' стала активной - ответ полностью сгенерирован");
         } catch (Exception e) {
             System.out.println("⚠️ Не удалось дождаться стрелки, пробуем альтернативный способ...");
 
