@@ -1,6 +1,5 @@
 package ru.sibgatulinanton.deepseek;
 
-
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebElement;
@@ -8,10 +7,13 @@ import org.openqa.selenium.support.PageFactory;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import ru.sibgatulinanton.deepseek.dto.DeepSeekElements;
 
+import java.util.List;
+
 public class DeepSeekChatPage {
 
     private final BrowserDriverManager browserManager;
     private final DeepSeekElements elements;
+    private int lastResponseCount = 0; // Счетчик ответов для отслеживания новых
 
     public DeepSeekChatPage(BrowserDriverManager browserManager) {
         this.browserManager = browserManager;
@@ -25,6 +27,18 @@ public class DeepSeekChatPage {
                     elements.getPromptTextAreaByPlaceholder().isDisplayed();
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    // Получение текущего количества ответов
+    private int getCurrentResponseCount() {
+        try {
+            List<WebElement> responses = browserManager.getDriver().findElements(
+                    By.xpath("//div[contains(@class, 'ds-markdown')]")
+            );
+            return responses.size();
+        } catch (Exception e) {
+            return 0;
         }
     }
 
@@ -49,35 +63,79 @@ public class DeepSeekChatPage {
         System.out.println("✅ Промпт установлен через innerHTML");
     }
 
+    // Проверка кнопки "Продолжить" ТОЛЬКО для последнего ответа
+    public boolean isContinueButtonVisibleForLastResponse() {
+        try {
+            WebElement continueButton = browserManager.getDriver().findElement(
+                    By.xpath("(//div[contains(@class, 'ds-markdown')])[last()]/ancestor::div[contains(@class, 'message')]//button[@role='button' and @aria-disabled='false']//span[text()='Продолжить']/ancestor::button[@role='button']")
+            );
+            return continueButton.isDisplayed() && continueButton.isEnabled();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // Клик по кнопке "Продолжить" для последнего ответа
+    public void clickContinueButtonForLastResponse() {
+        try {
+            WebElement continueButton = browserManager.getDriver().findElement(
+                    By.xpath("(//div[contains(@class, 'ds-markdown')])[last()]/ancestor::div[contains(@class, 'message')]//button[@role='button' and @aria-disabled='false']//span[text()='Продолжить']/ancestor::button[@role='button']")
+            );
+
+            JavascriptExecutor js = (JavascriptExecutor) browserManager.getDriver();
+            js.executeScript("arguments[0].scrollIntoView(true);", continueButton);
+            js.executeScript("arguments[0].click();", continueButton);
+
+            System.out.println("✅ Кнопка 'Продолжить' нажата, ждем продолжения генерации...");
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+        } catch (Exception e) {
+            System.out.println("⚠️ Не удалось нажать кнопку 'Продолжить': " + e.getMessage());
+        }
+    }
+
+    // Проверка кнопки "Копировать" ТОЛЬКО для последнего ответа
+    public boolean isCopyButtonEnabledForLastResponse() {
+        try {
+            WebElement copyButton = browserManager.getDriver().findElement(
+                    By.xpath("(//div[contains(@class, 'ds-markdown')])[last()]/ancestor::div[contains(@class, 'message')]//button[@role='button' and not(@disabled)]//span[contains(text(), 'Копировать')]/ancestor::button[@role='button' and not(@disabled)]")
+            );
+            return copyButton.isEnabled() && copyButton.isDisplayed();
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     public void sendPromptWithEnter(String prompt) {
-        // insertPrompt(prompt);
         setPromptViaInnerHTML(prompt);
+
         try {
-            Thread.sleep(3000L);
+            Thread.sleep(500);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+
         browserManager.getWait().until(ExpectedConditions.presenceOfElementLocated(
                 By.xpath("//div[@style='width: fit-content;']/div[@role='button' and @aria-disabled='false']")
         ));
 
-        // Находим кнопку через уникальный селектор
         WebElement sendButton = null;
 
         try {
-            // Пробуем найти через обертку (самый надежный способ)
             sendButton = browserManager.getDriver().findElement(
                     By.xpath("//div[@style='width: fit-content;']/div[@role='button' and @aria-disabled='false']")
             );
         } catch (Exception e) {
             try {
-                // Fallback: ищем по уникальному классу _52c986b
                 sendButton = browserManager.getDriver().findElement(
                         By.xpath("//div[contains(@class, '_52c986b') and @role='button' and @aria-disabled='false']")
                 );
             } catch (Exception ex) {
-                // Fallback: ищем по стрелке в path
                 sendButton = browserManager.getDriver().findElement(
                         By.xpath("//div[@role='button']//path[contains(@d, 'M8.3125 0.981587')]/ancestor::div[@role='button']")
                 );
@@ -88,51 +146,136 @@ public class DeepSeekChatPage {
             throw new RuntimeException("Не удалось найти кнопку отправки");
         }
 
-        // Проверяем, что это правильная кнопка
         if (!isCorrectSendButton(sendButton)) {
             System.out.println("⚠️ Найдена не та кнопка, ищем дальше...");
-            // Ищем кнопку с оберткой
             sendButton = browserManager.getDriver().findElement(
                     By.xpath("//div[@style='width: fit-content;']/div[@role='button']")
             );
         }
 
-        // Кликаем через JavaScript
         JavascriptExecutor js = (JavascriptExecutor) browserManager.getDriver();
         js.executeScript("arguments[0].scrollIntoView(true);", sendButton);
         js.executeScript("arguments[0].click();", sendButton);
 
         System.out.println("✅ Кнопка отправки нажата");
-        System.out.println("✅ Промпт отправлен (Enter)");
+        System.out.println("✅ Промпт отправлен");
     }
 
     public boolean isCorrectSendButton(WebElement button) {
         try {
             String html = button.getAttribute("outerHTML");
-            // Проверяем, что внутри есть стрелка, а не папка
             return html.contains("M8.3125 0.981587") && !html.contains("M9.67272 0.522841");
         } catch (Exception e) {
             return false;
         }
     }
 
-    public void sendPromptWithButton(String prompt) {
-        insertPrompt(prompt);
-        browserManager.getWait().until(ExpectedConditions.elementToBeClickable(elements.getSendButton())).click();
-        System.out.println("✅ Промпт отправлен (кнопка)");
+    // Ожидание появления НОВОГО ответа
+    public void waitForResponseStarted() {
+        System.out.println("⏳ Ожидание начала нового ответа...");
+
+        int initialCount = getCurrentResponseCount();
+        System.out.println("📊 Текущее количество ответов: " + initialCount);
+
+        try {
+            // Ждем, когда появится новый ответ (количество увеличится)
+            browserManager.getWait().until(ExpectedConditions.numberOfElementsToBeMoreThan(
+                    By.xpath("//div[contains(@class, 'ds-markdown')]"),
+                    initialCount
+            ));
+
+            System.out.println("✅ Новый ответ начал появляться");
+
+            // Небольшая задержка для стабилизации
+            Thread.sleep(500);
+
+        } catch (Exception e) {
+            System.out.println("⚠️ Не удалось обнаружить начало ответа: " + e.getMessage());
+        }
     }
 
+    // Ожидание полного завершения генерации НОВОГО ответа
+    public void waitForResponseComplete() {
+        System.out.println("⏳ Ожидание завершения генерации нового ответа...");
+
+        int maxWaitSeconds = 300;
+        int waitedSeconds = 0;
+        boolean copyButtonWasEnabled = false;
+
+        while (waitedSeconds < maxWaitSeconds) {
+            try {
+                // Приоритет 1: проверка кнопки "Продолжить" в последнем ответе
+                if (isContinueButtonVisibleForLastResponse()) {
+                    System.out.println("🔘 Обнаружена кнопка 'Продолжить', нажимаем...");
+                    clickContinueButtonForLastResponse();
+                    waitedSeconds = 0;
+                    copyButtonWasEnabled = false;
+                    Thread.sleep(1000);
+                    continue;
+                }
+
+                // Приоритет 2: проверка кнопки "Копировать" в последнем ответе
+                if (isCopyButtonEnabledForLastResponse()) {
+                    if (!copyButtonWasEnabled) {
+                        System.out.println("📋 Кнопка 'Копировать' активна, проверяем через 100мс...");
+                        copyButtonWasEnabled = true;
+
+                        Thread.sleep(100);
+
+                        // После паузы снова проверяем кнопку "Продолжить"
+                        if (isContinueButtonVisibleForLastResponse()) {
+                            System.out.println("🔘 После проверки появилась кнопка 'Продолжить', нажимаем...");
+                            clickContinueButtonForLastResponse();
+                            waitedSeconds = 0;
+                            copyButtonWasEnabled = false;
+                            continue;
+                        }
+
+                        // Финальная проверка кнопки "Копировать"
+                        if (isCopyButtonEnabledForLastResponse()) {
+                            System.out.println("✅ Генерация нового ответа завершена!");
+                            Thread.sleep(500); // Финальная стабилизация
+                            return;
+                        } else {
+                            System.out.println("⚠️ Кнопка 'Копировать' перестала быть активной, продолжаем...");
+                            copyButtonWasEnabled = false;
+                        }
+                    } else {
+                        return;
+                    }
+                } else {
+                    copyButtonWasEnabled = false;
+                }
+
+            } catch (Exception e) {
+                copyButtonWasEnabled = false;
+            }
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            waitedSeconds++;
+
+            if (waitedSeconds % 10 == 0) {
+                System.out.println("⏳ Ожидание... " + waitedSeconds + " сек");
+            }
+        }
+
+        System.out.println("⚠️ Таймаут ожидания, пробуем получить ответ в любом случае");
+    }
+
+    // Получение ТОЛЬКО ПОСЛЕДНЕГО (нового) ответа
     public String getResponse() {
         try {
-            // Находим все сообщения с ответами
-            java.util.List<WebElement> responses = browserManager.getDriver().findElements(
+            List<WebElement> responses = browserManager.getDriver().findElements(
                     By.xpath("//div[contains(@class, 'ds-markdown')]")
             );
 
             if (!responses.isEmpty()) {
                 String response = responses.get(responses.size() - 1).getText();
-                System.out.println("✅ Получен ответ (" + response.length() + " символов)");
-                System.out.println(response);
+                System.out.println("✅ Получен новый ответ (" + response.length() + " символов)");
                 return response;
             }
 
@@ -148,118 +291,20 @@ public class DeepSeekChatPage {
         if (!isUserLoggedIn()) {
             throw new RuntimeException("Пользователь не авторизован в DeepSeek!");
         }
+
+        // Запоминаем количество ответов до отправки
+        lastResponseCount = getCurrentResponseCount();
+        System.out.println("📊 Отправка промпта. Текущее количество ответов: " + lastResponseCount);
+
         sendPromptWithEnter(prompt);
 
-        // Ждем начала ответа
+        // Ждем начала нового ответа
         waitForResponseStarted();
 
         // Ждем полного завершения генерации
         waitForResponseComplete();
 
-        // Получаем ответ
+        // Получаем новый ответ
         return getResponse();
-    }
-
-
-    public void waitForResponseComplete() {
-        System.out.println("⏳ Ожидание завершения генерации ответа...");
-
-        try {
-            // Ждем, когда кнопка "Копировать" станет активной (без атрибута disabled)
-            browserManager.getWait().until(ExpectedConditions.presenceOfElementLocated(
-                    By.xpath("//button[@role='button' and not(@disabled)]//span[contains(text(), 'Копировать')]")
-            ));
-
-
-            System.out.println("✅ Кнопка 'Копировать' стала активной - ответ полностью сгенерирован");
-        } catch (Exception e) {
-            System.out.println("⚠️ Не удалось дождаться стрелки, пробуем альтернативный способ...");
-
-            // Альтернативный способ: ждем, пока исчезнет индикатор печати/генерации
-            try {
-                Thread.sleep(2000);
-
-                // Ищем индикатор генерации
-                By typingIndicator = By.xpath("//div[contains(@class, 'typing') or contains(@class, 'loading') or contains(@class, 'ds-typing')]");
-                browserManager.getWait().until(ExpectedConditions.invisibilityOfElementLocated(typingIndicator));
-
-                System.out.println("✅ Индикатор генерации исчез");
-            } catch (Exception ex) {
-                // Если индикатора нет, просто ждем фиксированное время
-                System.out.println("⏳ Дополнительная задержка 5 секунд...");
-                try {
-                    Thread.sleep(5000);
-                } catch (InterruptedException exc) {
-                    throw new RuntimeException(exc);
-                }
-            }
-        }
-
-        // Дополнительная задержка для полной стабилизации
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public boolean isContinueButtonVisible() {
-        try {
-            WebElement continueButton = browserManager.getDriver().findElement(
-                    By.xpath("//button[@role='button' and @aria-disabled='false']//span[text()='Продолжить']/ancestor::button[@role='button']")
-            );
-            return continueButton.isDisplayed() && continueButton.isEnabled();
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    public void clickContinueButton() {
-        try {
-            WebElement continueButton = browserManager.getDriver().findElement(
-                    By.xpath("//button[@role='button' and @aria-disabled='false']//span[text()='Продолжить']/ancestor::button[@role='button']")
-            );
-
-            JavascriptExecutor js = (JavascriptExecutor) browserManager.getDriver();
-            js.executeScript("arguments[0].scrollIntoView(true);", continueButton);
-            js.executeScript("arguments[0].click();", continueButton);
-
-            System.out.println("✅ Кнопка 'Продолжить' нажата, ждем продолжения генерации...");
-
-            // Небольшая задержка после клика
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-
-        } catch (Exception e) {
-            System.out.println("⚠️ Не удалось нажать кнопку 'Продолжить': " + e.getMessage());
-        }
-    }
-
-    // Ожидание появления первого символа ответа
-    public void waitForResponseStarted() {
-        System.out.println("⏳ Ожидание начала ответа...");
-
-        try {
-            // Ждем появления любого текста в области ответа
-            browserManager.getWait().until(ExpectedConditions.presenceOfElementLocated(
-                    By.xpath("//div[contains(@class, 'ds-markdown')]")
-            ));
-
-            Thread.sleep(200);
-
-            if (isContinueButtonVisible()) {
-                clickContinueButton();
-                waitForResponseComplete();
-            }
-
-
-            System.out.println("✅ Ответ начал появляться");
-
-        } catch (Exception e) {
-            System.out.println("⚠️ Не удалось обнаружить начало ответа");
-        }
     }
 }

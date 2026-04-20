@@ -45,7 +45,7 @@ public class App {
 
         String prompt = promptLoader.getPrompt(Language.RU,
                         "first_prompt")
-                .replaceAll("\\{TASK}", "Напиши сервис на java spring boot с авторизацией и регистрацией")
+                .replaceAll("\\{TASK}", "Напиши angrybirds на html css js")
                 .replaceAll("\\{OS}", osType.name())
                 .replaceAll("\\{WORKSPACE}", currentDir)
                 .replaceAll("\\{CMD}", OSType.WINDOWS.equals(osType) ? "PowerShell" : "bash");
@@ -80,7 +80,7 @@ public class App {
                     System.out.println(data);
                     String cmd =
                             OSType.WINDOWS.equals(osType) ?
-                                    CompleteCmd.executePowerShell(data+"\n") :
+                                    CompleteCmd.executePowerShell(data + "\n") :
                                     CompleteCmd.executeCommand(data);
                     System.out.println(cmd);
 
@@ -92,11 +92,11 @@ public class App {
                     System.out.println(data);
                     String cmd =
                             OSType.WINDOWS.equals(osType) ?
-                                    CompleteCmd.executePowerShell(data+"\n") :
+                                    CompleteCmd.executePowerShell(data + "\n") :
                                     CompleteCmd.executeCommand(data);
                     System.out.println(cmd);
 
-                    prompt = cmd;
+                    prompt = cmd.trim().isEmpty() ? "продолжай" : cmd;
                     promptIsExist = true;
                 } else if ("TEXT".equals(type)) {
                     System.out.println(data);
