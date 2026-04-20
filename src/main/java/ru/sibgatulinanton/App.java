@@ -5,6 +5,7 @@ import org.json.JSONObject;
 import ru.sibgatulinanton.deepseek.BrowserDriverManager;
 import ru.sibgatulinanton.deepseek.DeepSeekChatPage;
 import ru.sibgatulinanton.lang.Language;
+import ru.sibgatulinanton.os.OSType;
 import ru.sibgatulinanton.os.OSUtils;
 import ru.sibgatulinanton.os.cmd.CompleteCmd;
 import ru.sibgatulinanton.prompts.PromptLoader;
@@ -18,6 +19,7 @@ public class App {
     public static void main(String[] args) {
 
         String currentDir = System.getProperty("user.dir");
+        OSType osType = OSUtils.getOperatingSystemType();
 
         PromptLoader promptLoader = new PromptLoader();
 
@@ -44,15 +46,16 @@ public class App {
         String prompt = promptLoader.getPrompt(Language.RU,
                         "first_prompt")
                 .replaceAll("\\{TASK}", "Напиши сервис на java spring boot с авторизацией и регистрацией")
-                .replaceAll("\\{OS}", OSUtils.getOperatingSystemType().name())
-                .replaceAll("\\{WORKSPACE}", currentDir);
+                .replaceAll("\\{OS}", osType.name())
+                .replaceAll("\\{WORKSPACE}", currentDir)
+                .replaceAll("\\{CMD}", OSType.WINDOWS.equals(osType) ? "PowerShell" : "bash");
 
         boolean isEnd = false;
         boolean promptIsExist = false;
         while (!isEnd) {
             promptIsExist = false;
             String response = deepSeekPage.askDeepSeek(prompt)
-                    .replace("json","")
+                    .replace("json", "")
                     .replace("Копировать", "")
                     .replace("Скачать", "")
                     .trim();
@@ -64,7 +67,7 @@ public class App {
                 JSONObject operation = operations.getJSONObject(i);
                 String type = operation.getString("type");
                 String data = operation.getString("data");
-                String content = operation.has("content") ? operation.getString("content") : null;
+                String content = operation.has("content") && !operation.isNull("content") ? operation.getString("content") : null;
 
                 if ("END".equals(type)) {
                     isEnd = true;
@@ -75,7 +78,10 @@ public class App {
                     }
 
                     System.out.println(data);
-                    String cmd = CompleteCmd.executeCommand(data);
+                    String cmd =
+                            OSType.WINDOWS.equals(osType) ?
+                                    CompleteCmd.executePowerShell(data+"\n") :
+                                    CompleteCmd.executeCommand(data);
                     System.out.println(cmd);
 
                 } else if ("CMD_WAIT".equals(type)) {
@@ -84,8 +90,12 @@ public class App {
                     }
 
                     System.out.println(data);
-                    String cmd = CompleteCmd.executeCommand(data);
+                    String cmd =
+                            OSType.WINDOWS.equals(osType) ?
+                                    CompleteCmd.executePowerShell(data+"\n") :
+                                    CompleteCmd.executeCommand(data);
                     System.out.println(cmd);
+
                     prompt = cmd;
                     promptIsExist = true;
                 } else if ("TEXT".equals(type)) {

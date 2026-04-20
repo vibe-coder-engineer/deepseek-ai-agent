@@ -45,6 +45,23 @@
 ]
 }
 
+примеры PowerShell-команд с %s:
+
+json
+{
+"type": "CMD_WAIT",
+"data": "Get-ChildItem -Path '%s'",
+"content": "C:\\Users\\test"
+}
+
+{
+"type": "CMD_WAIT",
+"data": "Set-Content -Path 'some\\file' -Value '%s'",
+"content": "содержимое файла"
+}
+
+и т.п.
+
 Правила по типам operations:
 - type = "CMD" — команда, вывод которой НЕ нужен для следующих шагов (mkdir, rm, touch, cd и т.п.). Вывод игнорируется.
 - type = "CMD_WAIT" — команда, вывод которой НУЖЕН для следующих шагов (ls, pwd, cat, grep, find, git status, java -version и т.п.). Агент дождётся вывода и передаст его в следующем ответе.
@@ -59,30 +76,11 @@
 - "operations" — список команд/действий для текущего шага.
 - Если content != null — это данные, которые нужно подставить вместо %s в data.
 - Если content == null — не присылай поле content в этом объекте.
-- Все команды должны быть для {OS}
+- Все команды должны быть для {OS} {CMD}
 - Ты находишься в директории {WORKSPACE}
 - ВАЖНО: все пути в командах используй ТОЛЬКО в стиле {OS} (для Windows: cd /d "C:\path" с экранированием, для Linux/macOS: /path/to/dir)
 - ВАЖНО: экранируй обратные слеши в путях Windows как \\\\ (например, "C:\\\\Users\\\\name\\\\project")
-- НЕ используй Java-конструкции вроде new JSONObject(), new File() и т.п. — только чистые shell-команды.
-ПРАВИЛА ЭКРАНИРОВАНИЯ ДЛЯ JSON (ОБЯЗАТЕЛЬНЫ):
-
-1. В поле "data" ВСЕ обратные слеши \ ДОЛЖНЫ быть заменены на ДВА обратных слеша \\
-
-   НЕПРАВИЛЬНО: "mkdir C:\Users\name\project"
-   ПРАВИЛЬНО:   "mkdir C:\\Users\\name\\project"
-
-2. Двойные кавычки внутри команды экранируются как \"
-
-   НЕПРАВИЛЬНО: "echo "hello""
-   ПРАВИЛЬНО:   "echo \"hello\""
-
-3. Для Linux/macOS путей это не требуется (там /)
-
-4. ПРИМЕР правильной команды для Windows:
-   {
-     "type": "CMD",
-     "data": "mkdir C:\\Users\\89879\\Desktop\\deepseek-ai-agent\\auth-service\\src\\main\\java"
-   }
+- НЕ используй Java-конструкции вроде new JSONObject(), new File() и т.п. — только чистые bash или shell команды.
 
 5. Если ты используешь переменные окружения (например, %USERPROFILE%), не экранируй в них %, только слеши.
 
