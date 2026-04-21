@@ -100,7 +100,7 @@ public class App {
                 } catch (RuntimeException ex) {
                     consecutiveStepFailures++;
                     String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
-                    if (msg.contains("авториз")) {
+                    if (msg.contains("авториз") || msg.contains("not authorized")) {
                         log("WARN", "DeepSeek session is not authorized. Re-login in browser and press Enter.");
                         scanner.nextLine();
                         ensureLoggedInOrWait(scanner, deepSeekPage, "retry after unauthorized");
@@ -108,8 +108,9 @@ public class App {
                     }
 
                     log("WARN", "Step failed: " + ex.getMessage());
-                    if (consecutiveStepFailures > 5) {
-                        throw ex;
+                    if (consecutiveStepFailures > 20) {
+                        log("WARN", "Too many consecutive failures, keep retrying from clean state");
+                        consecutiveStepFailures = 0;
                     }
 
                     recoverDialogState(manager, deepSeekPage, selection, activeChatId, scanner);
@@ -136,8 +137,9 @@ public class App {
                 } catch (Exception ex) {
                     log("ERROR", "Failed to parse AI response as JSON: " + ex.getMessage());
                     consecutiveStepFailures++;
-                    if (consecutiveStepFailures > 5) {
-                        break;
+                    if (consecutiveStepFailures > 20) {
+                        log("WARN", "Too many JSON parse failures, reset failure counter and continue");
+                        consecutiveStepFailures = 0;
                     }
                     log("WARN", "Retrying last step due to JSON parse error");
                     continue;
@@ -147,8 +149,9 @@ public class App {
                 if (operations == null) {
                     log("ERROR", "AI response doesn't contain operations[]");
                     consecutiveStepFailures++;
-                    if (consecutiveStepFailures > 5) {
-                        break;
+                    if (consecutiveStepFailures > 20) {
+                        log("WARN", "Too many missing operations[] failures, reset failure counter and continue");
+                        consecutiveStepFailures = 0;
                     }
                     log("WARN", "Retrying last step because operations[] is missing");
                     continue;
