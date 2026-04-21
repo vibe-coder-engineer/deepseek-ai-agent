@@ -58,16 +58,18 @@ public class App {
             DeepSeekChatPage deepSeekPage = new DeepSeekChatPage(manager);
 
             if (execMode) {
+                String execPrompt = execPromptArg;
                 if (threadArg != null && !threadArg.trim().isEmpty()) {
                     manager.openUrl(toThreadUrl(threadArg.trim()));
                     ensureLoggedInOrWait(scanner, deepSeekPage, "exec-thread");
                 } else {
                     manager.openDeepSeek();
                     ensureLoggedInOrWait(scanner, deepSeekPage, "exec");
+                    execPrompt = buildFirstPrompt(promptLoader, execPromptArg, osType, currentDir);
                 }
 
                 manager.driverWait(30);
-                runDialogUntilEnd(scanner, deepSeekPage, osType, execPromptArg, execPromptArg, threadArg != null && !threadArg.trim().isEmpty());
+                runDialogUntilEnd(scanner, deepSeekPage, osType, execPrompt, execPromptArg, threadArg != null && !threadArg.trim().isEmpty());
                 log("INFO", "Exec mode completed. Exit.");
                 System.exit(0);
             }
@@ -108,16 +110,7 @@ public class App {
                             task = "Write hello world in Java";
                         }
 
-                        String firstPromptTemplate = promptLoader.getPrompt(Language.RU, "first_prompt");
-                        if (firstPromptTemplate == null) {
-                            throw new IllegalStateException("Prompt template resources/prompts/ru/first_prompt.txt not found");
-                        }
-
-                        prompt = firstPromptTemplate
-                                .replace("{TASK}", task)
-                                .replace("{OS}", osType.name())
-                                .replace("{WORKSPACE}", currentDir)
-                                .replace("{CMD}", OSType.WINDOWS.equals(osType) ? "PowerShell" : "bash");
+                        prompt = buildFirstPrompt(promptLoader, task, osType, currentDir);
                     }
                 }
                 DialogRunResult runResult = runDialogUntilEnd(scanner, deepSeekPage, osType, prompt, task, selection.resume);
@@ -314,6 +307,20 @@ public class App {
             String error = ex.getMessage() == null ? ex.toString() : ex.getMessage();
             return "COMMAND_ERROR\nFAILED_COMMAND:\n" + command + "\nERROR:\n" + error;
         }
+    }
+
+    private static String buildFirstPrompt(PromptLoader promptLoader, String task, OSType osType, String currentDir) {
+        String firstPromptTemplate = promptLoader.getPrompt(Language.RU, "first_prompt");
+        if (firstPromptTemplate == null) {
+            throw new IllegalStateException("Prompt template resources/prompts/ru/first_prompt.txt not found");
+        }
+
+        String effectiveTask = (task == null || task.trim().isEmpty()) ? "Write hello world in Java" : task;
+        return firstPromptTemplate
+                .replace("{TASK}", effectiveTask)
+                .replace("{OS}", osType.name())
+                .replace("{WORKSPACE}", currentDir)
+                .replace("{CMD}", OSType.WINDOWS.equals(osType) ? "PowerShell" : "bash");
     }
 
     private static boolean isCommandFailed(String commandResult) {
