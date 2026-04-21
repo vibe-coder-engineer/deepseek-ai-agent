@@ -22,8 +22,14 @@ public class BrowserDriverManager {
 
     private WebDriver driver;
     private WebDriverWait wait;
+    private final boolean headless;
 
     public BrowserDriverManager() {
+        this(false);
+    }
+
+    public BrowserDriverManager(boolean headless) {
+        this.headless = headless;
         init();
     }
 
@@ -43,6 +49,10 @@ public class BrowserDriverManager {
 
         options.addArguments("--disable-notifications");
         options.addArguments("--disable-popup-blocking");
+        if (headless) {
+            options.addArguments("--headless=new");
+            options.addArguments("--window-size=1920,1080");
+        }
 
         driver = new EdgeDriver(options);
         wait = new WebDriverWait(driver, Duration.ofSeconds(WAIT_DRIVER_SECONDS));
