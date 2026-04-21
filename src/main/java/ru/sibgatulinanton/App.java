@@ -17,6 +17,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -29,7 +30,7 @@ public class App {
     private static final String CONTINUE_PROMPT = "continue";
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private static final Path VIBE_DIR = Paths.get(".vibecoder");
+    private static final Path VIBE_DIR = Paths.get(System.getProperty("user.home"), ".vibecoder");
     private static final Path SESSIONS_DIR = VIBE_DIR.resolve("sessions");
     private static final Path CURRENT_SESSION_FILE = VIBE_DIR.resolve("current-session.txt");
 
@@ -474,6 +475,12 @@ public class App {
 
     private static void ensureStorage() {
         try {
+            Path legacyVibeDir = Paths.get(System.getProperty("user.dir"), ".vibecoder");
+            if (Files.exists(legacyVibeDir) && !legacyVibeDir.equals(VIBE_DIR) && !Files.exists(VIBE_DIR)) {
+                Files.createDirectories(VIBE_DIR.getParent());
+                Files.move(legacyVibeDir, VIBE_DIR, StandardCopyOption.REPLACE_EXISTING);
+                log("INFO", "Storage migrated: " + legacyVibeDir + " -> " + VIBE_DIR);
+            }
             Files.createDirectories(SESSIONS_DIR);
         } catch (IOException e) {
             throw new RuntimeException("Failed to create .vibecoder storage", e);

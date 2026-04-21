@@ -8,7 +8,11 @@ import ru.sibgatulinanton.lang.Language;
 import ru.sibgatulinanton.os.OSUtils;
 import ru.sibgatulinanton.prompts.PromptLoader;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 
 public class BrowserDriverManager {
@@ -24,36 +28,44 @@ public class BrowserDriverManager {
     }
 
     private void init() {
-        // Указываем путь к драйверу
         System.setProperty("webdriver.edge.driver", "resources/drivers/msedgedriver.exe");
 
         EdgeOptions options = new EdgeOptions();
 
-        // ===== КЛЮЧЕВОЕ РЕШЕНИЕ: сохраняем профиль между запусками =====
-        // Создаем папку для профиля, если её нет
-        String userDir = System.getProperty("user.dir");
-        String profilePath = Paths.get(userDir, "edge_profile_deepseek").toString();
-
-        // Используем постоянный профиль
+        String profilePath = resolvePersistentProfilePath().toString();
         options.addArguments("user-data-dir=" + profilePath);
-
-        // Опционально: конкретный профиль внутри папки
         options.addArguments("--profile-directory=Default");
 
-        // Дополнительные опции для стабильности
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
         options.addArguments("--remote-allow-origins=*");
         options.addArguments("--disable-gpu");
 
-        // Отключаем лишние уведомления
         options.addArguments("--disable-notifications");
         options.addArguments("--disable-popup-blocking");
 
-
         driver = new EdgeDriver(options);
         wait = new WebDriverWait(driver, Duration.ofSeconds(WAIT_DRIVER_SECONDS));
+    }
 
+    private Path resolvePersistentProfilePath() {
+        Path targetProfilePath = Paths.get(System.getProperty("user.home"), ".vibecoder", "edge_profile_deepseek");
+        Path legacyProfilePath = Paths.get(System.getProperty("user.dir"), "edge_profile_deepseek");
+
+        try {
+            Files.createDirectories(targetProfilePath.getParent());
+
+            if (Files.exists(legacyProfilePath) && !Files.exists(targetProfilePath)) {
+                Files.move(legacyProfilePath, targetProfilePath, StandardCopyOption.REPLACE_EXISTING);
+                System.out.println("[INFO] Edge profile moved: " + legacyProfilePath + " -> " + targetProfilePath);
+            }
+
+            Files.createDirectories(targetProfilePath);
+            return targetProfilePath;
+        } catch (IOException e) {
+            System.out.println("[WARN] Failed to use persistent profile path. Fallback to project path. Reason: " + e.getMessage());
+            return legacyProfilePath;
+        }
     }
 
     public void openDeepSeek() {
@@ -90,7 +102,6 @@ public class BrowserDriverManager {
     public static void main(String[] args) {
         PromptLoader promptLoader = new PromptLoader();
 
-
         String prompt = promptLoader.getPrompt(Language.RU,
                         "first_prompt")
                 .replaceAll("\\{TASK}", "Напиши сервис на java который будет проверять лицензии по приватному ключу")
@@ -98,5 +109,4 @@ public class BrowserDriverManager {
                         .name());
         System.out.println(prompt);
     }
-
 }
