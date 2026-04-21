@@ -46,7 +46,7 @@ public class App {
 
         String prompt = promptLoader.getPrompt(Language.RU,
                         "first_prompt")
-                .replaceAll("\\{TASK}", "Напиши hello world на java")
+                .replaceAll("\\{TASK}", "Напиши змека на html css js")
                 .replaceAll("\\{OS}", osType.name())
                 .replaceAll("\\{WORKSPACE}", currentDir)
                 .replaceAll("\\{CMD}", OSType.WINDOWS.equals(osType) ? "PowerShell" : "bash");

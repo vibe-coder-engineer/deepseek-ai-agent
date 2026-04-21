@@ -13,7 +13,7 @@ public class DeepSeekChatPage {
 
     private final BrowserDriverManager browserManager;
     private final DeepSeekElements elements;
-    private int lastResponseCount = 0; // Счетчик ответов для отслеживания новых
+    private int lastResponseCount = 0; 
 
     public DeepSeekChatPage(BrowserDriverManager browserManager) {
         this.browserManager = browserManager;
@@ -110,13 +110,20 @@ public class DeepSeekChatPage {
 
         // Проверка, что текст действительно вставился
         String actualValue = (String) js.executeScript("return arguments[0].value;", textArea);
-        if (actualValue != null && actualValue.equals(prompt)) {
+        boolean matchesPrompt = actualValue != null
+                && (actualValue.equals(prompt) || actualValue.equals(prompt + " "));
+        if (matchesPrompt) {
             System.out.println("✅ Промпт успешно установлен: " + prompt.substring(0, Math.min(50, prompt.length())) + "...");
         } else {
             System.out.println("⚠️ Ошибка! Ожидалось: " + prompt + ", Получено: " + actualValue);
             // Пробуем еще раз через sendKeys
-            textArea.clear();
-            textArea.sendKeys(prompt);
+            js.executeScript(
+                    "arguments[0].value = arguments[1];" +
+                            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));" +
+                            "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));",
+                    textArea,
+                    prompt
+            );
         }
     }
 
@@ -130,7 +137,7 @@ public class DeepSeekChatPage {
             return continueButton.isDisplayed() && continueButton.isEnabled();
         } catch (Exception e) {
             // Если не нашли, ищем иконку-кнопку
-            try {
+           /* try {
                 WebElement iconButton = browserManager.getDriver().findElement(
                         By.xpath("//div[contains(@class, 'ds-icon-button') and @role='button']")
                 );
@@ -138,6 +145,9 @@ public class DeepSeekChatPage {
             } catch (Exception e2) {
                 return false;
             }
+
+            */
+           return false;
         }
     }
 
@@ -152,7 +162,7 @@ public class DeepSeekChatPage {
 
         } catch (Exception e) {
             // Если нет кнопки с текстом, ищем иконку
-            try {
+          /*  try {
                 WebElement iconButton = browserManager.getDriver().findElement(
                         By.xpath("//div[contains(@class, 'ds-icon-button') and @role='button']")
                 );
@@ -163,6 +173,9 @@ public class DeepSeekChatPage {
                 System.out.println("⚠️ Не удалось нажать кнопку 'Продолжить': " + e.getMessage());
                 return;
             }
+
+           */
+            e.printStackTrace();
         }
 
         // Ждем продолжения генерации
@@ -174,6 +187,38 @@ public class DeepSeekChatPage {
     }
 
     // Проверка кнопки "Копировать" ТОЛЬКО для последнего ответа
+    public boolean isRepeatButtonVisibleForLastResponse() {
+        try {
+            WebElement repeatButton = browserManager.getDriver().findElement(
+                    By.xpath("//button[@role='button' and @aria-disabled='false'][.//span[normalize-space(text())='Повторить']]")
+            );
+            return repeatButton.isDisplayed() && repeatButton.isEnabled();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public void clickRepeatButtonForLastResponse() {
+        try {
+            WebElement repeatButton = browserManager.getDriver().findElement(
+                    By.xpath("//button[@role='button' and @aria-disabled='false'][.//span[normalize-space(text())='Повторить']]")
+            );
+
+            JavascriptExecutor js = (JavascriptExecutor) browserManager.getDriver();
+            js.executeScript("arguments[0].scrollIntoView(true);", repeatButton);
+            js.executeScript("arguments[0].click();", repeatButton);
+            System.out.println("✅ Кнопка 'Повторить' нажата");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
     public boolean isCopyButtonEnabledForLastResponse() {
         try {
             WebElement copyButton = browserManager.getDriver().findElement(
@@ -290,6 +335,15 @@ public class DeepSeekChatPage {
                 }
 
                 // Приоритет 2: проверка кнопки "Копировать" в последнем ответе
+                if (isRepeatButtonVisibleForLastResponse()) {
+                    System.out.println("🔁 Обнаружена кнопка 'Повторить', нажимаем...");
+                    clickRepeatButtonForLastResponse();
+                    waitedSeconds = 0;
+                    copyButtonWasEnabled = false;
+                    Thread.sleep(1000);
+                    continue;
+                }
+
                 if (isCopyButtonEnabledForLastResponse()) {
                     if (!copyButtonWasEnabled) {
                         System.out.println("📋 Кнопка 'Копировать' активна, проверяем через 100мс...");
