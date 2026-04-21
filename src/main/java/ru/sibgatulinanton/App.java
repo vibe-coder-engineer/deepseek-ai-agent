@@ -97,7 +97,8 @@ public class App {
                 try {
                     rawResponse = deepSeekPage.askDeepSeek(prompt);
                 } catch (RuntimeException ex) {
-                    if (ex.getMessage() != null && ex.getMessage().contains("не авторизован")) {
+                    String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+                    if (msg.contains("авториз")) {
                         log("WARN", "DeepSeek session is not authorized. Re-login in browser and press Enter.");
                         scanner.nextLine();
                         ensureLoggedInOrWait(scanner, deepSeekPage, "retry after unauthorized");

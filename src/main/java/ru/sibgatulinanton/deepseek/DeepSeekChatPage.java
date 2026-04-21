@@ -67,7 +67,7 @@ public class DeepSeekChatPage {
         return false;
     }
 
-    // Получение текущего количества ответов
+    // РџРѕР»СѓС‡РµРЅРёРµ С‚РµРєСѓС‰РµРіРѕ РєРѕР»РёС‡РµСЃС‚РІР° РѕС‚РІРµС‚РѕРІ
     private int getCurrentResponseCount() {
         try {
             List<WebElement> responses = browserManager.getDriver().findElements(
@@ -83,7 +83,7 @@ public class DeepSeekChatPage {
         browserManager.getWait().until(ExpectedConditions.elementToBeClickable(elements.getPromptTextArea()));
         elements.getPromptTextArea().clear();
         elements.getPromptTextArea().sendKeys(prompt);
-        System.out.println("✅ Промпт вставлен: " + prompt);
+        System.out.println("вњ… РџСЂРѕРјРїС‚ РІСЃС‚Р°РІР»РµРЅ: " + prompt);
     }
 
     public void setPromptViaInnerHTML(String prompt) {
@@ -97,15 +97,15 @@ public class DeepSeekChatPage {
                 prompt
         );
 
-        System.out.println("✅ Промпт установлен через innerHTML");
+        System.out.println("вњ… РџСЂРѕРјРїС‚ СѓСЃС‚Р°РЅРѕРІР»РµРЅ С‡РµСЂРµР· innerHTML");
     }
 
 
     private WebElement getFreshTextArea() {
         try {
-            // Пробуем найти заново, а не использовать кэшированный
+            // РџСЂРѕР±СѓРµРј РЅР°Р№С‚Рё Р·Р°РЅРѕРІРѕ, Р° РЅРµ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РєСЌС€РёСЂРѕРІР°РЅРЅС‹Р№
             return browserManager.getDriver().findElement(
-                    By.xpath("//textarea[@placeholder='Сообщение для DeepSeek']")
+                    By.xpath("//textarea[@placeholder='РЎРѕРѕР±С‰РµРЅРёРµ РґР»СЏ DeepSeek']")
             );
         } catch (Exception e) {
             try {
@@ -120,20 +120,12 @@ public class DeepSeekChatPage {
         }
     }
 
-    public void setPromptViaJS(String prompt) {
-        // Каждый раз получаем свежий элемент, а не кэшированный
+    public boolean setPromptViaJS(String prompt) {
         WebElement textArea = getFreshTextArea();
-
         browserManager.getWait().until(ExpectedConditions.elementToBeClickable(textArea));
 
         JavascriptExecutor js = (JavascriptExecutor) browserManager.getDriver();
-
-        // Очищаем и устанавливаем значение
-        js.executeScript(
-                "arguments[0].value = '';",  // Очистка
-                textArea
-        );
-
+        js.executeScript("arguments[0].value = '';", textArea);
         js.executeScript(
                 "arguments[0].value = arguments[1];" +
                         "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));" +
@@ -143,37 +135,61 @@ public class DeepSeekChatPage {
                 textArea,
                 prompt
         );
+
+        try {
+            Thread.sleep(150);
+        } catch (InterruptedException ignored) {
+        }
+
         textArea.sendKeys(" ");
 
-        // Проверка, что текст действительно вставился
+        try {
+            Thread.sleep(150);
+        } catch (InterruptedException ignored) {
+        }
+
         String actualValue = (String) js.executeScript("return arguments[0].value;", textArea);
         boolean matchesPrompt = actualValue != null
                 && (actualValue.equals(prompt) || actualValue.equals(prompt + " "));
         if (matchesPrompt) {
             System.out.println("✅ Промпт успешно установлен: " + prompt.substring(0, Math.min(50, prompt.length())) + "...");
-        } else {
-            System.out.println("⚠️ Ошибка! Ожидалось: " + prompt + ", Получено: " + actualValue);
-            // Пробуем еще раз через sendKeys
-            js.executeScript(
-                    "arguments[0].value = arguments[1];" +
-                            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));" +
-                            "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));",
-                    textArea,
-                    prompt
-            );
+            return true;
         }
+
+        System.out.println("⚠️ Ошибка! Ожидалось: " + prompt + ", Получено: " + actualValue);
+        js.executeScript(
+                "arguments[0].value = arguments[1];" +
+                        "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));" +
+                        "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));" +
+                        "arguments[0].dispatchEvent(new Event('keyup', { bubbles: true }));",
+                textArea,
+                prompt + " "
+        );
+
+        try {
+            Thread.sleep(150);
+        } catch (InterruptedException ignored) {
+        }
+
+        String retryValue = (String) js.executeScript("return arguments[0].value;", textArea);
+        boolean retryMatches = retryValue != null
+                && (retryValue.equals(prompt) || retryValue.equals(prompt + " "));
+        if (!retryMatches) {
+            System.out.println("❌ Повторная вставка не удалась. Получено: " + retryValue);
+        }
+        return retryMatches;
     }
 
     public boolean isContinueButtonVisibleForLastResponse() {
         try {
-            // Сначала ищем кнопку с текстом "Продолжить"
+            // РЎРЅР°С‡Р°Р»Р° РёС‰РµРј РєРЅРѕРїРєСѓ СЃ С‚РµРєСЃС‚РѕРј "РџСЂРѕРґРѕР»Р¶РёС‚СЊ"
             WebElement continueButton = browserManager.getDriver().findElement(
-                    By.xpath("//button[.//span[text()='Продолжить']]")
+                    By.xpath("//button[.//span[text()='РџСЂРѕРґРѕР»Р¶РёС‚СЊ']]")
             );
 
             return continueButton.isDisplayed() && continueButton.isEnabled();
         } catch (Exception e) {
-            // Если не нашли, ищем иконку-кнопку
+            // Р•СЃР»Рё РЅРµ РЅР°С€Р»Рё, РёС‰РµРј РёРєРѕРЅРєСѓ-РєРЅРѕРїРєСѓ
            /* try {
                 WebElement iconButton = browserManager.getDriver().findElement(
                         By.xpath("//div[contains(@class, 'ds-icon-button') and @role='button']")
@@ -190,24 +206,24 @@ public class DeepSeekChatPage {
 
     public void clickContinueButtonForLastResponse() {
         try {
-            // Сначала пробуем найти кнопку с текстом "Продолжить"
+            // РЎРЅР°С‡Р°Р»Р° РїСЂРѕР±СѓРµРј РЅР°Р№С‚Рё РєРЅРѕРїРєСѓ СЃ С‚РµРєСЃС‚РѕРј "РџСЂРѕРґРѕР»Р¶РёС‚СЊ"
             WebElement continueButton = browserManager.getDriver().findElement(
-                    By.xpath("//button[.//span[text()='Продолжить']]")
+                    By.xpath("//button[.//span[text()='РџСЂРѕРґРѕР»Р¶РёС‚СЊ']]")
             );
             continueButton.click();
-            System.out.println("✅ Кнопка 'Продолжить' (с текстом) нажата");
+            System.out.println("вњ… РљРЅРѕРїРєР° 'РџСЂРѕРґРѕР»Р¶РёС‚СЊ' (СЃ С‚РµРєСЃС‚РѕРј) РЅР°Р¶Р°С‚Р°");
 
         } catch (Exception e) {
-            // Если нет кнопки с текстом, ищем иконку
+            // Р•СЃР»Рё РЅРµС‚ РєРЅРѕРїРєРё СЃ С‚РµРєСЃС‚РѕРј, РёС‰РµРј РёРєРѕРЅРєСѓ
           /*  try {
                 WebElement iconButton = browserManager.getDriver().findElement(
                         By.xpath("//div[contains(@class, 'ds-icon-button') and @role='button']")
                 );
                 iconButton.click();
-                System.out.println("✅ Кнопка 'Продолжить' (иконка) нажата");
+                System.out.println("вњ… РљРЅРѕРїРєР° 'РџСЂРѕРґРѕР»Р¶РёС‚СЊ' (РёРєРѕРЅРєР°) РЅР°Р¶Р°С‚Р°");
 
             } catch (Exception e2) {
-                System.out.println("⚠️ Не удалось нажать кнопку 'Продолжить': " + e.getMessage());
+                System.out.println("вљ пёЏ РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р¶Р°С‚СЊ РєРЅРѕРїРєСѓ 'РџСЂРѕРґРѕР»Р¶РёС‚СЊ': " + e.getMessage());
                 return;
             }
 
@@ -215,7 +231,7 @@ public class DeepSeekChatPage {
             e.printStackTrace();
         }
 
-        // Ждем продолжения генерации
+        // Р–РґРµРј РїСЂРѕРґРѕР»Р¶РµРЅРёСЏ РіРµРЅРµСЂР°С†РёРё
         try {
             Thread.sleep(1000);
         } catch (InterruptedException e) {
@@ -223,11 +239,11 @@ public class DeepSeekChatPage {
         }
     }
 
-    // Проверка кнопки "Копировать" ТОЛЬКО для последнего ответа
+    // РџСЂРѕРІРµСЂРєР° РєРЅРѕРїРєРё "РљРѕРїРёСЂРѕРІР°С‚СЊ" РўРћР›Р¬РљРћ РґР»СЏ РїРѕСЃР»РµРґРЅРµРіРѕ РѕС‚РІРµС‚Р°
     public boolean isRepeatButtonVisibleForLastResponse() {
         try {
             WebElement repeatButton = browserManager.getDriver().findElement(
-                    By.xpath("//button[@role='button' and @aria-disabled='false'][.//span[normalize-space(text())='Повторить']]")
+                    By.xpath("//button[@role='button' and @aria-disabled='false'][.//span[normalize-space(text())='РџРѕРІС‚РѕСЂРёС‚СЊ']]")
             );
             return repeatButton.isDisplayed() && repeatButton.isEnabled();
         } catch (Exception e) {
@@ -238,13 +254,13 @@ public class DeepSeekChatPage {
     public void clickRepeatButtonForLastResponse() {
         try {
             WebElement repeatButton = browserManager.getDriver().findElement(
-                    By.xpath("//button[@role='button' and @aria-disabled='false'][.//span[normalize-space(text())='Повторить']]")
+                    By.xpath("//button[@role='button' and @aria-disabled='false'][.//span[normalize-space(text())='РџРѕРІС‚РѕСЂРёС‚СЊ']]")
             );
 
             JavascriptExecutor js = (JavascriptExecutor) browserManager.getDriver();
             js.executeScript("arguments[0].scrollIntoView(true);", repeatButton);
             js.executeScript("arguments[0].click();", repeatButton);
-            System.out.println("✅ Кнопка 'Повторить' нажата");
+            System.out.println("вњ… РљРЅРѕРїРєР° 'РџРѕРІС‚РѕСЂРёС‚СЊ' РЅР°Р¶Р°С‚Р°");
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -259,7 +275,7 @@ public class DeepSeekChatPage {
     public boolean isCopyButtonEnabledForLastResponse() {
         try {
             WebElement copyButton = browserManager.getDriver().findElement(
-                    By.xpath("(//div[contains(@class, 'ds-markdown')])[last()]/ancestor::div[contains(@class, 'message')]//button[@role='button' and not(@disabled)]//span[contains(text(), 'Копировать')]/ancestor::button[@role='button' and not(@disabled)]")
+                    By.xpath("(//div[contains(@class, 'ds-markdown')])[last()]/ancestor::div[contains(@class, 'message')]//button[@role='button' and not(@disabled)]//span[contains(text(), 'РљРѕРїРёСЂРѕРІР°С‚СЊ')]/ancestor::button[@role='button' and not(@disabled)]")
             );
             return copyButton.isEnabled() && copyButton.isDisplayed();
         } catch (Exception e) {
@@ -268,8 +284,22 @@ public class DeepSeekChatPage {
     }
 
     public void sendPromptWithEnter(String prompt) {
-        //setPromptViaInnerHTML(prompt);
-        setPromptViaJS(prompt);
+        boolean inserted = false;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            inserted = setPromptViaJS(prompt);
+            if (inserted) {
+                break;
+            }
+            System.out.println("⚠️ Промпт не вставился (попытка " + attempt + "/3), повторяем...");
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ignored) {
+            }
+        }
+
+        if (!inserted) {
+            throw new RuntimeException("Не удалось вставить промпт в поле ввода");
+        }
 
         try {
             Thread.sleep(500);
@@ -300,11 +330,11 @@ public class DeepSeekChatPage {
         }
 
         if (sendButton == null) {
-            throw new RuntimeException("Не удалось найти кнопку отправки");
+            throw new RuntimeException("РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё РєРЅРѕРїРєСѓ РѕС‚РїСЂР°РІРєРё");
         }
 
         if (!isCorrectSendButton(sendButton)) {
-            System.out.println("⚠️ Найдена не та кнопка, ищем дальше...");
+            System.out.println("вљ пёЏ РќР°Р№РґРµРЅР° РЅРµ С‚Р° РєРЅРѕРїРєР°, РёС‰РµРј РґР°Р»СЊС€Рµ...");
             sendButton = browserManager.getDriver().findElement(
                     By.xpath("//div[@style='width: fit-content;']/div[@role='button']")
             );
@@ -314,8 +344,8 @@ public class DeepSeekChatPage {
         js.executeScript("arguments[0].scrollIntoView(true);", sendButton);
         js.executeScript("arguments[0].click();", sendButton);
 
-        System.out.println("✅ Кнопка отправки нажата");
-        System.out.println("✅ Промпт отправлен");
+        System.out.println("вњ… РљРЅРѕРїРєР° РѕС‚РїСЂР°РІРєРё РЅР°Р¶Р°С‚Р°");
+        System.out.println("вњ… РџСЂРѕРјРїС‚ РѕС‚РїСЂР°РІР»РµРЅ");
     }
 
     public boolean isCorrectSendButton(WebElement button) {
@@ -327,33 +357,33 @@ public class DeepSeekChatPage {
         }
     }
 
-    // Ожидание появления НОВОГО ответа
+    // РћР¶РёРґР°РЅРёРµ РїРѕСЏРІР»РµРЅРёСЏ РќРћР’РћР“Рћ РѕС‚РІРµС‚Р°
     public void waitForResponseStarted() {
-        System.out.println("⏳ Ожидание начала нового ответа...");
+        System.out.println("вЏі РћР¶РёРґР°РЅРёРµ РЅР°С‡Р°Р»Р° РЅРѕРІРѕРіРѕ РѕС‚РІРµС‚Р°...");
 
         int initialCount = getCurrentResponseCount();
-        System.out.println("📊 Текущее количество ответов: " + initialCount);
+        System.out.println("рџ“Љ РўРµРєСѓС‰РµРµ РєРѕР»РёС‡РµСЃС‚РІРѕ РѕС‚РІРµС‚РѕРІ: " + initialCount);
 
         try {
-            // Ждем, когда появится новый ответ (количество увеличится)
+            // Р–РґРµРј, РєРѕРіРґР° РїРѕСЏРІРёС‚СЃСЏ РЅРѕРІС‹Р№ РѕС‚РІРµС‚ (РєРѕР»РёС‡РµСЃС‚РІРѕ СѓРІРµР»РёС‡РёС‚СЃСЏ)
             browserManager.getWait().until(ExpectedConditions.numberOfElementsToBeMoreThan(
                     By.xpath("//div[contains(@class, 'ds-markdown')]"),
                     initialCount
             ));
 
-            System.out.println("✅ Новый ответ начал появляться");
+            System.out.println("вњ… РќРѕРІС‹Р№ РѕС‚РІРµС‚ РЅР°С‡Р°Р» РїРѕСЏРІР»СЏС‚СЊСЃСЏ");
 
-            // Небольшая задержка для стабилизации
+            // РќРµР±РѕР»СЊС€Р°СЏ Р·Р°РґРµСЂР¶РєР° РґР»СЏ СЃС‚Р°Р±РёР»РёР·Р°С†РёРё
             Thread.sleep(500);
 
         } catch (Exception e) {
-            System.out.println("⚠️ Не удалось обнаружить начало ответа: " + e.getMessage());
+            System.out.println("вљ пёЏ РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅР°СЂСѓР¶РёС‚СЊ РЅР°С‡Р°Р»Рѕ РѕС‚РІРµС‚Р°: " + e.getMessage());
         }
     }
 
-    // Ожидание полного завершения генерации НОВОГО ответа
+    // РћР¶РёРґР°РЅРёРµ РїРѕР»РЅРѕРіРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ РіРµРЅРµСЂР°С†РёРё РќРћР’РћР“Рћ РѕС‚РІРµС‚Р°
     public void waitForResponseComplete() {
-        System.out.println("⏳ Ожидание завершения генерации нового ответа...");
+        System.out.println("вЏі РћР¶РёРґР°РЅРёРµ Р·Р°РІРµСЂС€РµРЅРёСЏ РіРµРЅРµСЂР°С†РёРё РЅРѕРІРѕРіРѕ РѕС‚РІРµС‚Р°...");
 
         int maxWaitSeconds = 300;
         int waitedSeconds = 0;
@@ -361,9 +391,9 @@ public class DeepSeekChatPage {
 
         while (waitedSeconds < maxWaitSeconds) {
             try {
-                // Приоритет 1: проверка кнопки "Продолжить" в последнем ответе
+                // РџСЂРёРѕСЂРёС‚РµС‚ 1: РїСЂРѕРІРµСЂРєР° РєРЅРѕРїРєРё "РџСЂРѕРґРѕР»Р¶РёС‚СЊ" РІ РїРѕСЃР»РµРґРЅРµРј РѕС‚РІРµС‚Рµ
                 if (isContinueButtonVisibleForLastResponse()) {
-                    System.out.println("🔘 Обнаружена кнопка 'Продолжить', нажимаем...");
+                    System.out.println("рџ” РћР±РЅР°СЂСѓР¶РµРЅР° РєРЅРѕРїРєР° 'РџСЂРѕРґРѕР»Р¶РёС‚СЊ', РЅР°Р¶РёРјР°РµРј...");
                     clickContinueButtonForLastResponse();
                     waitedSeconds = 0;
                     copyButtonWasEnabled = false;
@@ -371,9 +401,9 @@ public class DeepSeekChatPage {
                     continue;
                 }
 
-                // Приоритет 2: проверка кнопки "Копировать" в последнем ответе
+                // РџСЂРёРѕСЂРёС‚РµС‚ 2: РїСЂРѕРІРµСЂРєР° РєРЅРѕРїРєРё "РљРѕРїРёСЂРѕРІР°С‚СЊ" РІ РїРѕСЃР»РµРґРЅРµРј РѕС‚РІРµС‚Рµ
                 if (isRepeatButtonVisibleForLastResponse()) {
-                    System.out.println("🔁 Обнаружена кнопка 'Повторить', нажимаем...");
+                    System.out.println("рџ”Ѓ РћР±РЅР°СЂСѓР¶РµРЅР° РєРЅРѕРїРєР° 'РџРѕРІС‚РѕСЂРёС‚СЊ', РЅР°Р¶РёРјР°РµРј...");
                     clickRepeatButtonForLastResponse();
                     waitedSeconds = 0;
                     copyButtonWasEnabled = false;
@@ -383,27 +413,27 @@ public class DeepSeekChatPage {
 
                 if (isCopyButtonEnabledForLastResponse()) {
                     if (!copyButtonWasEnabled) {
-                        System.out.println("📋 Кнопка 'Копировать' активна, проверяем через 100мс...");
+                        System.out.println("рџ“‹ РљРЅРѕРїРєР° 'РљРѕРїРёСЂРѕРІР°С‚СЊ' Р°РєС‚РёРІРЅР°, РїСЂРѕРІРµСЂСЏРµРј С‡РµСЂРµР· 100РјСЃ...");
                         copyButtonWasEnabled = true;
 
                         Thread.sleep(200);
 
-                        // После паузы снова проверяем кнопку "Продолжить"
+                        // РџРѕСЃР»Рµ РїР°СѓР·С‹ СЃРЅРѕРІР° РїСЂРѕРІРµСЂСЏРµРј РєРЅРѕРїРєСѓ "РџСЂРѕРґРѕР»Р¶РёС‚СЊ"
                         if (isContinueButtonVisibleForLastResponse()) {
-                            System.out.println("🔘 После проверки появилась кнопка 'Продолжить', нажимаем...");
+                            System.out.println("рџ” РџРѕСЃР»Рµ РїСЂРѕРІРµСЂРєРё РїРѕСЏРІРёР»Р°СЃСЊ РєРЅРѕРїРєР° 'РџСЂРѕРґРѕР»Р¶РёС‚СЊ', РЅР°Р¶РёРјР°РµРј...");
                             clickContinueButtonForLastResponse();
                             waitedSeconds = 0;
                             copyButtonWasEnabled = false;
                             continue;
                         }
 
-                        // Финальная проверка кнопки "Копировать"
+                        // Р¤РёРЅР°Р»СЊРЅР°СЏ РїСЂРѕРІРµСЂРєР° РєРЅРѕРїРєРё "РљРѕРїРёСЂРѕРІР°С‚СЊ"
                         if (isCopyButtonEnabledForLastResponse()) {
-                            System.out.println("✅ Генерация нового ответа завершена!");
-                            Thread.sleep(500); // Финальная стабилизация
+                            System.out.println("вњ… Р“РµРЅРµСЂР°С†РёСЏ РЅРѕРІРѕРіРѕ РѕС‚РІРµС‚Р° Р·Р°РІРµСЂС€РµРЅР°!");
+                            Thread.sleep(500); // Р¤РёРЅР°Р»СЊРЅР°СЏ СЃС‚Р°Р±РёР»РёР·Р°С†РёСЏ
                             return;
                         } else {
-                            System.out.println("⚠️ Кнопка 'Копировать' перестала быть активной, продолжаем...");
+                            System.out.println("вљ пёЏ РљРЅРѕРїРєР° 'РљРѕРїРёСЂРѕРІР°С‚СЊ' РїРµСЂРµСЃС‚Р°Р»Р° Р±С‹С‚СЊ Р°РєС‚РёРІРЅРѕР№, РїСЂРѕРґРѕР»Р¶Р°РµРј...");
                             copyButtonWasEnabled = false;
                         }
                     } else {
@@ -425,14 +455,14 @@ public class DeepSeekChatPage {
             waitedSeconds++;
 
             if (waitedSeconds % 10 == 0) {
-                System.out.println("⏳ Ожидание... " + waitedSeconds + " сек");
+                System.out.println("вЏі РћР¶РёРґР°РЅРёРµ... " + waitedSeconds + " СЃРµРє");
             }
         }
 
-        System.out.println("⚠️ Таймаут ожидания, пробуем получить ответ в любом случае");
+        System.out.println("вљ пёЏ РўР°Р№РјР°СѓС‚ РѕР¶РёРґР°РЅРёСЏ, РїСЂРѕР±СѓРµРј РїРѕР»СѓС‡РёС‚СЊ РѕС‚РІРµС‚ РІ Р»СЋР±РѕРј СЃР»СѓС‡Р°Рµ");
     }
 
-    // Получение ТОЛЬКО ПОСЛЕДНЕГО (нового) ответа
+    // РџРѕР»СѓС‡РµРЅРёРµ РўРћР›Р¬РљРћ РџРћРЎР›Р•Р”РќР•Р“Рћ (РЅРѕРІРѕРіРѕ) РѕС‚РІРµС‚Р°
     public String getResponse() {
         try {
             List<WebElement> responses = browserManager.getDriver().findElements(
@@ -441,14 +471,14 @@ public class DeepSeekChatPage {
 
             if (!responses.isEmpty()) {
                 String response = responses.get(responses.size() - 1).getText();
-                System.out.println("✅ Получен новый ответ (" + response.length() + " символов)");
+                System.out.println("вњ… РџРѕР»СѓС‡РµРЅ РЅРѕРІС‹Р№ РѕС‚РІРµС‚ (" + response.length() + " СЃРёРјРІРѕР»РѕРІ)");
                 return response;
             }
 
             return null;
 
         } catch (Exception e) {
-            System.err.println("❌ Ошибка при получении ответа: " + e.getMessage());
+            System.err.println("вќЊ РћС€РёР±РєР° РїСЂРё РїРѕР»СѓС‡РµРЅРёРё РѕС‚РІРµС‚Р°: " + e.getMessage());
             return null;
         }
     }
@@ -476,22 +506,22 @@ public class DeepSeekChatPage {
 
     public String askDeepSeek(String prompt) {
         if (!isUserLoggedIn()) {
-            throw new RuntimeException("Пользователь не авторизован в DeepSeek!");
+            throw new RuntimeException("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ РІ DeepSeek!");
         }
 
-        // Запоминаем количество ответов до отправки
+        // Р—Р°РїРѕРјРёРЅР°РµРј РєРѕР»РёС‡РµСЃС‚РІРѕ РѕС‚РІРµС‚РѕРІ РґРѕ РѕС‚РїСЂР°РІРєРё
         lastResponseCount = getCurrentResponseCount();
-        System.out.println("📊 Отправка промпта. Текущее количество ответов: " + lastResponseCount);
+        System.out.println("рџ“Љ РћС‚РїСЂР°РІРєР° РїСЂРѕРјРїС‚Р°. РўРµРєСѓС‰РµРµ РєРѕР»РёС‡РµСЃС‚РІРѕ РѕС‚РІРµС‚РѕРІ: " + lastResponseCount);
 
         sendPromptWithEnter(prompt);
 
-        // Ждем начала нового ответа
+        // Р–РґРµРј РЅР°С‡Р°Р»Р° РЅРѕРІРѕРіРѕ РѕС‚РІРµС‚Р°
         waitForResponseStarted();
 
-        // Ждем полного завершения генерации
+        // Р–РґРµРј РїРѕР»РЅРѕРіРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ РіРµРЅРµСЂР°С†РёРё
         waitForResponseComplete();
 
-        // Получаем новый ответ
+        // РџРѕР»СѓС‡Р°РµРј РЅРѕРІС‹Р№ РѕС‚РІРµС‚
         return getResponse();
     }
 }
