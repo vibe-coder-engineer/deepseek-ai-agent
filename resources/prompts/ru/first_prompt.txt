@@ -50,7 +50,7 @@
 json
 {
 "type": "CMD_WAIT",
-"data": "Get-ChildItem -Path '%s'",
+"data": "Get-ChildItem -Path \"%s\"",
 "content": "C:\\Users\\test"
 }
 

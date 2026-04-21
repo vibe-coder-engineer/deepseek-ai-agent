@@ -65,17 +65,7 @@ public class DeepSeekElements {
 
     // ========== ГЕТТЕРЫ ==========
 
-    public WebElement getPromptTextArea() {
-        try {
-            return promptTextAreaByPlaceholder;
-        } catch (Exception e) {
-            try {
-                return promptTextAreaByName;
-            } catch (Exception ex) {
-                return promptTextAreaByAutocomplete;
-            }
-        }
-    }
+
 
     public WebElement getSendButton() {
         // Возвращаем активную кнопку (не disabled)
@@ -90,13 +80,6 @@ public class DeepSeekElements {
         }
     }
 
-    public WebElement getPromptTextAreaByPlaceholder() {
-        return promptTextAreaByPlaceholder;
-    }
-
-    public WebElement getPromptTextAreaByName() {
-        return promptTextAreaByName;
-    }
 
     public WebElement getSendButtonByRole() {
         return sendButtonByRole;
@@ -121,4 +104,32 @@ public class DeepSeekElements {
     public WebElement getLoadingIndicator() {
         return loadingIndicator;
     }
+
+
+
+
+    public WebElement getPromptTextArea() {
+        try {
+            return promptTextAreaByPlaceholder;
+        } catch (Exception e) {
+            try {
+                return promptTextAreaByName;
+            } catch (Exception ex) {
+                try {
+                    return promptTextAreaByAutocomplete;
+                } catch (Exception exc) {
+                    return promptTextAreaByClass;
+                }
+            }
+        }
+    }
+
+    public WebElement getPromptTextAreaByPlaceholder() {
+        return promptTextAreaByPlaceholder;
+    }
+
+    public WebElement getPromptTextAreaByName() {
+        return promptTextAreaByName;
+    }
+
 }

@@ -1,5 +1,6 @@
 package ru.sibgatulinanton;
 
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import ru.sibgatulinanton.deepseek.BrowserDriverManager;
@@ -45,7 +46,7 @@ public class App {
 
         String prompt = promptLoader.getPrompt(Language.RU,
                         "first_prompt")
-                .replaceAll("\\{TASK}", "Напиши angrybirds на html css js")
+                .replaceAll("\\{TASK}", "Напиши hello world на java")
                 .replaceAll("\\{OS}", osType.name())
                 .replaceAll("\\{WORKSPACE}", currentDir)
                 .replaceAll("\\{CMD}", OSType.WINDOWS.equals(osType) ? "PowerShell" : "bash");
@@ -67,7 +68,7 @@ public class App {
                 JSONObject operation = operations.getJSONObject(i);
                 String type = operation.getString("type");
                 String data = operation.getString("data");
-                String content = operation.has("content") && !operation.isNull("content") ? operation.getString("content") : null;
+                String content = operation.has("content") && !operation.isNull("content") ? StringEscapeUtils.escapeEcmaScript(operation.getString("content")) : null;
 
                 if ("END".equals(type)) {
                     isEnd = true;
