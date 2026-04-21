@@ -87,6 +87,7 @@ public class App {
             boolean isEnd = false;
             boolean promptExists;
             String activeChatId = selection.resume ? selection.session.chatId : null;
+            int consecutiveStepFailures = 0;
 
             while (!isEnd) {
                 promptExists = false;
@@ -97,6 +98,7 @@ public class App {
                 try {
                     rawResponse = deepSeekPage.askDeepSeek(prompt);
                 } catch (RuntimeException ex) {
+                    consecutiveStepFailures++;
                     String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
                     if (msg.contains("авториз")) {
                         log("WARN", "DeepSeek session is not authorized. Re-login in browser and press Enter.");
@@ -104,8 +106,17 @@ public class App {
                         ensureLoggedInOrWait(scanner, deepSeekPage, "retry after unauthorized");
                         continue;
                     }
-                    throw ex;
+
+                    log("WARN", "Step failed: " + ex.getMessage());
+                    if (consecutiveStepFailures > 5) {
+                        throw ex;
+                    }
+
+                    recoverDialogState(manager, deepSeekPage, selection, activeChatId, scanner);
+                    log("INFO", "Retrying last step with same prompt");
+                    continue;
                 }
+                consecutiveStepFailures = 0;
                 logBlock("AI_RAW_RESPONSE", rawResponse);
 
                 String currentChatId = deepSeekPage.getChatIdFromCurrentUrl();
@@ -124,13 +135,23 @@ public class App {
                     jsonObject = new JSONObject(response);
                 } catch (Exception ex) {
                     log("ERROR", "Failed to parse AI response as JSON: " + ex.getMessage());
-                    break;
+                    consecutiveStepFailures++;
+                    if (consecutiveStepFailures > 5) {
+                        break;
+                    }
+                    log("WARN", "Retrying last step due to JSON parse error");
+                    continue;
                 }
 
                 JSONArray operations = jsonObject.optJSONArray("operations");
                 if (operations == null) {
                     log("ERROR", "AI response doesn't contain operations[]");
-                    break;
+                    consecutiveStepFailures++;
+                    if (consecutiveStepFailures > 5) {
+                        break;
+                    }
+                    log("WARN", "Retrying last step because operations[] is missing");
+                    continue;
                 }
 
                 for (int i = 0; i < operations.length(); i++) {
@@ -191,6 +212,31 @@ public class App {
                 .replace("Копировать", "")
                 .replace("Скачать", "")
                 .trim();
+    }
+
+    private static void recoverDialogState(
+            BrowserDriverManager manager,
+            DeepSeekChatPage deepSeekPage,
+            SessionSelection selection,
+            String activeChatId,
+            Scanner scanner
+    ) {
+        try {
+            String targetUrl;
+            if (activeChatId != null && !activeChatId.trim().isEmpty()) {
+                targetUrl = BrowserDriverManager.CHAT_DEEPSEEK_LINK + "/a/chat/s/" + activeChatId;
+            } else if (selection.resume && selection.session != null && selection.session.url != null && !selection.session.url.trim().isEmpty()) {
+                targetUrl = selection.session.url;
+            } else {
+                targetUrl = BrowserDriverManager.CHAT_DEEPSEEK_LINK;
+            }
+
+            log("WARN", "Recovering dialog state. Open URL: " + targetUrl);
+            manager.openUrl(targetUrl);
+            ensureLoggedInOrWait(scanner, deepSeekPage, "recovery");
+        } catch (Exception e) {
+            log("WARN", "Recovery failed: " + e.getMessage());
+        }
     }
 
     private static SessionSelection chooseSession(Scanner scanner) {
