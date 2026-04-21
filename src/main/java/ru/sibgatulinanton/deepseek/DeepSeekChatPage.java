@@ -26,11 +26,45 @@ public class DeepSeekChatPage {
 
     public boolean isUserLoggedIn() {
         try {
-            return elements.getPromptTextArea().isDisplayed() ||
-                    elements.getPromptTextAreaByPlaceholder().isDisplayed();
+            String currentUrl = getCurrentUrl();
+            if (currentUrl != null) {
+                String lower = currentUrl.toLowerCase();
+                if (lower.contains("sign-in") || lower.contains("login")) {
+                    return false;
+                }
+            }
+
+            if (hasVisibleElement(By.cssSelector("textarea"))) {
+                return true;
+            }
+
+            if (hasVisibleElement(By.cssSelector("div[contenteditable='true']"))) {
+                return true;
+            }
+
+            if (hasVisibleElement(By.xpath("//textarea[@name='search' or @autocomplete='off']"))) {
+                return true;
+            }
+
+            return hasVisibleElement(
+                    By.xpath("//div[@role='button' and @aria-disabled='false' and .//*[local-name()='svg']]")
+            );
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private boolean hasVisibleElement(By by) {
+        List<WebElement> elements = browserManager.getDriver().findElements(by);
+        for (WebElement element : elements) {
+            try {
+                if (element.isDisplayed()) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return false;
     }
 
     // Получение текущего количества ответов

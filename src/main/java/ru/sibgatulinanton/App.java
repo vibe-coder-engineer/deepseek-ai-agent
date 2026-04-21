@@ -48,12 +48,7 @@ public class App {
             manager.openDeepSeek();
             DeepSeekChatPage deepSeekPage = new DeepSeekChatPage(manager);
 
-            if (deepSeekPage.isUserLoggedIn()) {
-                log("INFO", "User is authenticated in DeepSeek");
-            } else {
-                log("WARN", "User is NOT authenticated in DeepSeek. Authenticate in browser and press Enter.");
-                scanner.nextLine();
-            }
+            ensureLoggedInOrWait(scanner, deepSeekPage, "startup");
 
             manager.driverWait(30);
 
@@ -64,6 +59,7 @@ public class App {
             if (selection.resume) {
                 manager.openUrl(selection.session.url);
                 log("INFO", "Resumed dialog: " + selection.session.url);
+                ensureLoggedInOrWait(scanner, deepSeekPage, "resume");
                 task = selection.session.task;
                 prompt = askLine(scanner, "Enter message for resumed dialog (Enter = 'продолжай'): ");
                 if (prompt.trim().isEmpty()) {
@@ -94,9 +90,21 @@ public class App {
 
             while (!isEnd) {
                 promptExists = false;
+                ensureLoggedInOrWait(scanner, deepSeekPage, "before send");
 
                 logBlock("PROMPT_TO_AI", prompt);
-                String rawResponse = deepSeekPage.askDeepSeek(prompt);
+                String rawResponse;
+                try {
+                    rawResponse = deepSeekPage.askDeepSeek(prompt);
+                } catch (RuntimeException ex) {
+                    if (ex.getMessage() != null && ex.getMessage().contains("не авторизован")) {
+                        log("WARN", "DeepSeek session is not authorized. Re-login in browser and press Enter.");
+                        scanner.nextLine();
+                        ensureLoggedInOrWait(scanner, deepSeekPage, "retry after unauthorized");
+                        continue;
+                    }
+                    throw ex;
+                }
                 logBlock("AI_RAW_RESPONSE", rawResponse);
 
                 String currentChatId = deepSeekPage.getChatIdFromCurrentUrl();
@@ -305,6 +313,24 @@ public class App {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    private static void ensureLoggedInOrWait(Scanner scanner, DeepSeekChatPage deepSeekPage, String stage) {
+        while (!deepSeekPage.isUserLoggedIn()) {
+            log("WARN", "User is NOT authenticated in DeepSeek (" + stage + "). Authenticate in browser and press Enter.");
+            scanner.nextLine();
+
+            for (int i = 0; i < 20; i++) {
+                if (deepSeekPage.isUserLoggedIn()) {
+                    break;
+                }
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException ignored) {
+                }
+            }
+        }
+        log("INFO", "User is authenticated in DeepSeek (" + stage + ")");
     }
 
     private static void log(String level, String message) {
