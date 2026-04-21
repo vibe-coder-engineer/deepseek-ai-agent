@@ -8,8 +8,11 @@ import org.openqa.selenium.support.ui.ExpectedConditions;
 import ru.sibgatulinanton.deepseek.dto.DeepSeekElements;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class DeepSeekChatPage {
+    private static final Pattern CHAT_ID_PATTERN = Pattern.compile("/a/chat/s/([0-9a-fA-F-]+)");
 
     private final BrowserDriverManager browserManager;
     private final DeepSeekElements elements;
@@ -414,6 +417,27 @@ public class DeepSeekChatPage {
             System.err.println("❌ Ошибка при получении ответа: " + e.getMessage());
             return null;
         }
+    }
+
+    public String getCurrentUrl() {
+        try {
+            return browserManager.getDriver().getCurrentUrl();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public String getChatIdFromCurrentUrl() {
+        String currentUrl = getCurrentUrl();
+        if (currentUrl == null || currentUrl.trim().isEmpty()) {
+            return null;
+        }
+
+        Matcher matcher = CHAT_ID_PATTERN.matcher(currentUrl);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
     }
 
     public String askDeepSeek(String prompt) {
