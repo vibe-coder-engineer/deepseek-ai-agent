@@ -26,7 +26,7 @@ import java.util.Scanner;
 
 public class App {
 
-    private static final String CONTINUE_PROMPT = "продолжай";
+    private static final String CONTINUE_PROMPT = "continue";
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private static final Path VIBE_DIR = Paths.get(".vibecoder");
@@ -49,7 +49,6 @@ public class App {
             DeepSeekChatPage deepSeekPage = new DeepSeekChatPage(manager);
 
             ensureLoggedInOrWait(scanner, deepSeekPage, "startup");
-
             manager.driverWait(30);
 
             SessionSelection selection = chooseSession(scanner);
@@ -60,8 +59,9 @@ public class App {
                 manager.openUrl(selection.session.url);
                 log("INFO", "Resumed dialog: " + selection.session.url);
                 ensureLoggedInOrWait(scanner, deepSeekPage, "resume");
+
                 task = selection.session.task;
-                prompt = askLine(scanner, "Enter message for resumed dialog (Enter = 'продолжай'): ");
+                prompt = askLine(scanner, "Enter message for resumed dialog (Enter = 'continue'): ");
                 if (prompt.trim().isEmpty()) {
                     prompt = CONTINUE_PROMPT;
                 }
@@ -94,6 +94,7 @@ public class App {
                 ensureLoggedInOrWait(scanner, deepSeekPage, "before send");
 
                 logBlock("PROMPT_TO_AI", prompt);
+
                 String rawResponse;
                 try {
                     rawResponse = deepSeekPage.askDeepSeek(prompt);
@@ -104,20 +105,18 @@ public class App {
                         log("WARN", "DeepSeek session is not authorized. Re-login in browser and press Enter.");
                         scanner.nextLine();
                         ensureLoggedInOrWait(scanner, deepSeekPage, "retry after unauthorized");
-                        continue;
+                    } else {
+                        log("WARN", "Step failed: " + ex.getMessage());
                     }
 
-                    log("WARN", "Step failed: " + ex.getMessage());
                     if (consecutiveStepFailures > 20) {
-                        log("WARN", "Too many consecutive failures, keep retrying from clean state");
+                        log("WARN", "Too many failures. Reset counter and keep retrying same step.");
                         consecutiveStepFailures = 0;
                     }
-
-                    recoverDialogState(manager, deepSeekPage, selection, activeChatId, scanner);
-                    log("INFO", "Retrying last step with same prompt");
                     continue;
                 }
                 consecutiveStepFailures = 0;
+
                 logBlock("AI_RAW_RESPONSE", rawResponse);
 
                 String currentChatId = deepSeekPage.getChatIdFromCurrentUrl();
@@ -131,29 +130,15 @@ public class App {
                 String response = cleanResponse(rawResponse);
                 logBlock("AI_CLEAN_RESPONSE", response);
 
-                JSONObject jsonObject;
-                try {
-                    jsonObject = new JSONObject(response);
-                } catch (Exception ex) {
-                    log("ERROR", "Failed to parse AI response as JSON: " + ex.getMessage());
-                    consecutiveStepFailures++;
-                    if (consecutiveStepFailures > 20) {
-                        log("WARN", "Too many JSON parse failures, reset failure counter and continue");
-                        consecutiveStepFailures = 0;
-                    }
-                    log("WARN", "Retrying last step due to JSON parse error");
+                JSONObject jsonObject = extractJsonObject(response);
+                if (jsonObject == null) {
+                    log("ERROR", "Failed to parse AI response as JSON payload");
                     continue;
                 }
 
                 JSONArray operations = jsonObject.optJSONArray("operations");
                 if (operations == null) {
                     log("ERROR", "AI response doesn't contain operations[]");
-                    consecutiveStepFailures++;
-                    if (consecutiveStepFailures > 20) {
-                        log("WARN", "Too many missing operations[] failures, reset failure counter and continue");
-                        consecutiveStepFailures = 0;
-                    }
-                    log("WARN", "Retrying last step because operations[] is missing");
                     continue;
                 }
 
@@ -168,26 +153,30 @@ public class App {
                     if ("END".equals(type)) {
                         isEnd = true;
                         logBlock("AI_END", content == null ? "<empty>" : content);
-                    } else if ("CMD".equals(type) || "CMD_WAIT".equals(type)) {
+                        break;
+                    }
+
+                    if ("CMD".equals(type) || "CMD_WAIT".equals(type)) {
                         if (content != null) {
                             data = data.replace("%s", content);
                         }
 
                         logBlock("LOCAL_COMMAND", data);
-                        String cmdResult = OSType.WINDOWS.equals(osType)
-                                ? CompleteCmd.executePowerShell(data + "\n")
-                                : CompleteCmd.executeCommand(data);
+                        String cmdResult = runLocalCommandWithCapture(data, osType);
                         logBlock("LOCAL_COMMAND_RESULT", cmdResult);
 
-                        if ("CMD_WAIT".equals(type)) {
-                            prompt = cmdResult == null || cmdResult.trim().isEmpty() ? CONTINUE_PROMPT : cmdResult;
+                        if ("CMD_WAIT".equals(type) || isCommandFailed(cmdResult)) {
+                            prompt = (cmdResult == null || cmdResult.trim().isEmpty()) ? CONTINUE_PROMPT : cmdResult;
                             promptExists = true;
                         }
-                    } else if ("TEXT".equals(type)) {
-                        logBlock("AI_TEXT", data);
-                    } else {
-                        log("WARN", "Unknown operation type: " + type);
+                        continue;
                     }
+
+                    if ("TEXT".equals(type)) {
+                        continue;
+                    }
+
+                    log("WARN", "Unknown operation type: " + type);
                 }
 
                 if (!promptExists && !isEnd) {
@@ -205,40 +194,67 @@ public class App {
         }
     }
 
+    private static String runLocalCommandWithCapture(String command, OSType osType) {
+        try {
+            return OSType.WINDOWS.equals(osType)
+                    ? CompleteCmd.executePowerShell(command + "\n")
+                    : CompleteCmd.executeCommand(command);
+        } catch (Exception ex) {
+            String error = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+            return "COMMAND_ERROR\nFAILED_COMMAND:\n" + command + "\nERROR:\n" + error;
+        }
+    }
+
+    private static boolean isCommandFailed(String commandResult) {
+        if (commandResult == null) {
+            return false;
+        }
+
+        String lower = commandResult.toLowerCase();
+        return lower.contains("command_error")
+                || lower.contains("exception")
+                || lower.contains("ошибка")
+                || lower.contains("error");
+    }
+
     private static String cleanResponse(String rawResponse) {
         if (rawResponse == null) {
             return "";
         }
 
         return rawResponse
-                .replace("json", "")
-                .replace("Копировать", "")
-                .replace("Скачать", "")
+                .replace("```json", "")
+                .replace("```", "")
+                .replaceAll("(?im)^\\s*json\\s*$", "")
+                .replaceAll("(?im)^\\s*copy\\s*$", "")
+                .replaceAll("(?im)^\\s*download\\s*$", "")
+                .replaceAll("(?im)^\\s*копировать\\s*$", "")
+                .replaceAll("(?im)^\\s*скачать\\s*$", "")
                 .trim();
     }
 
-    private static void recoverDialogState(
-            BrowserDriverManager manager,
-            DeepSeekChatPage deepSeekPage,
-            SessionSelection selection,
-            String activeChatId,
-            Scanner scanner
-    ) {
-        try {
-            String targetUrl;
-            if (activeChatId != null && !activeChatId.trim().isEmpty()) {
-                targetUrl = BrowserDriverManager.CHAT_DEEPSEEK_LINK + "/a/chat/s/" + activeChatId;
-            } else if (selection.resume && selection.session != null && selection.session.url != null && !selection.session.url.trim().isEmpty()) {
-                targetUrl = selection.session.url;
-            } else {
-                targetUrl = BrowserDriverManager.CHAT_DEEPSEEK_LINK;
-            }
+    private static JSONObject extractJsonObject(String text) {
+        if (text == null) {
+            return null;
+        }
 
-            log("WARN", "Recovering dialog state. Open URL: " + targetUrl);
-            manager.openUrl(targetUrl);
-            ensureLoggedInOrWait(scanner, deepSeekPage, "recovery");
-        } catch (Exception e) {
-            log("WARN", "Recovery failed: " + e.getMessage());
+        String trimmed = text.trim();
+        try {
+            return new JSONObject(trimmed);
+        } catch (Exception ignored) {
+        }
+
+        int firstBrace = trimmed.indexOf('{');
+        int lastBrace = trimmed.lastIndexOf('}');
+        if (firstBrace < 0 || lastBrace <= firstBrace) {
+            return null;
+        }
+
+        String candidate = trimmed.substring(firstBrace, lastBrace + 1).trim();
+        try {
+            return new JSONObject(candidate);
+        } catch (Exception ignored) {
+            return null;
         }
     }
 
