@@ -1,4 +1,4 @@
-# deepseek-ai-agent
+# deepseek-ai-agent (Аналог codex ChatGPT)
 
 ## RU
 
