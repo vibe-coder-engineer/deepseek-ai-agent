@@ -103,7 +103,7 @@ mvn clean package
 
 ## EN
 
-Java agent for automating DeepSeek Chat via Selenium (Microsoft Edge).
+Java agent for automating DeepSeek Chat via Selenium (Microsoft Edge). (replacement codex ChatGPT for free)
 
 ### Features
 
