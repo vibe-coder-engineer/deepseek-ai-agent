@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class App {
 
@@ -53,6 +54,13 @@ public class App {
 
         PromptLoader promptLoader = new PromptLoader();
         BrowserDriverManager manager = new BrowserDriverManager(headless);
+        AtomicBoolean driverClosed = new AtomicBoolean(false);
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            @Override
+            public void run() {
+                safeQuit(manager, driverClosed);
+            }
+        }, "deepseek-driver-shutdown"));
 
         try (Scanner scanner = new Scanner(System.in)) {
             DeepSeekChatPage deepSeekPage = new DeepSeekChatPage(manager);
@@ -71,7 +79,7 @@ public class App {
                 manager.driverWait(30);
                 runDialogUntilEnd(scanner, deepSeekPage, osType, execPrompt, execPromptArg, threadArg != null && !threadArg.trim().isEmpty());
                 log("INFO", "Exec mode completed. Exit.");
-                System.exit(0);
+                return;
             }
 
             manager.openDeepSeek();
@@ -159,10 +167,7 @@ public class App {
             log("INFO", "App finished. Press Enter to exit.");
             scanner.nextLine();
         } finally {
-            try {
-                manager.quit();
-            } catch (Exception ignored) {
-            }
+            safeQuit(manager, driverClosed);
         }
     }
     private static DialogRunResult runDialogUntilEnd(Scanner scanner,
@@ -306,6 +311,19 @@ public class App {
         } catch (Exception ex) {
             String error = ex.getMessage() == null ? ex.toString() : ex.getMessage();
             return "COMMAND_ERROR\nFAILED_COMMAND:\n" + command + "\nERROR:\n" + error;
+        }
+    }
+
+    private static void safeQuit(BrowserDriverManager manager, AtomicBoolean driverClosed) {
+        if (manager == null || driverClosed == null) {
+            return;
+        }
+        if (!driverClosed.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            manager.quit();
+        } catch (Exception ignored) {
         }
     }
 
