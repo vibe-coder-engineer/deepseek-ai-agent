@@ -28,6 +28,49 @@
   ]
 }
 
+RAG memory operations:
+- There are two RAG knowledge bases:
+  1. GLOBAL RAG for agent-wide facts that apply across projects, such as where Java, Maven, browser drivers, shells, caches, or reusable tools are located.
+  2. LOCAL RAG for project-specific facts inside the project root folder you are working on.
+- GLOBAL RAG is stored outside the project in the agent home.
+- LOCAL RAG is stored in <projectRoot>/.rag. You must explicitly pass the project root folder in local RAG operations using content JSON field "workspace" or "projectRoot".
+- RAG entries are persisted as files, then loaded into an in-memory Apache Lucene HNSW vector index for SEARCH_RAG and LIST_RAG.
+- Use ADD_GLOBAL_RAG for durable environment/tooling facts that are useful across folders: Java path, Maven path, OS quirks, installed tools, reusable commands.
+- Use ADD_RAG for durable facts about the current project only: architecture notes, project conventions, important decisions, known pitfalls, commands that worked in that repo.
+- Use SEARCH_GLOBAL_RAG before looking for environment/tooling facts.
+- Use SEARCH_RAG before investigating if the task may depend on prior project knowledge.
+- Use REMOVE_GLOBAL_RAG or REMOVE_RAG only when an entry is wrong or obsolete.
+- Do not store secrets, tokens, passwords, private keys, cookies, or credentials in RAG.
+
+RAG operation types:
+- "ADD_GLOBAL_RAG" stores one global knowledge entry. data is a short stable title/id. content is plain text, or JSON string {"title":"...","text":"...","tags":["..."]}.
+- "SEARCH_GLOBAL_RAG" searches global knowledge. data is the query. content is optional JSON string {"maxMatches":5}. Its result is returned to you for the next step.
+- "REMOVE_GLOBAL_RAG" removes one global entry by id. data is the id returned by ADD_GLOBAL_RAG or SEARCH_GLOBAL_RAG.
+- "LIST_GLOBAL_RAG" lists global knowledge ids. content is optional JSON string {"maxMatches":50}. Its result is returned to you for the next step.
+- "ADD_RAG" stores one local project knowledge entry. data is a short stable title/id. content must be JSON string with "workspace" or "projectRoot", for example {"workspace":"{WORKSPACE}","title":"...","text":"...","tags":["..."]}.
+- "SEARCH_RAG" searches local project knowledge. data is the query. content must include "workspace" or "projectRoot", for example {"workspace":"{WORKSPACE}","maxMatches":5}. Its result is returned to you for the next step.
+- "REMOVE_RAG" removes one local entry by id. data is the id returned by ADD_RAG or SEARCH_RAG; content must include "workspace" or "projectRoot".
+- "LIST_RAG" lists local project knowledge ids. content must include "workspace" or "projectRoot" and can include "maxMatches":50. Its result is returned to you for the next step.
+
+RAG examples:
+{
+  "type": "ADD_RAG",
+  "data": "build-command",
+  "content": "{\"workspace\":\"{WORKSPACE}\",\"title\":\"build-command\",\"text\":\"Use mvn -DskipTests compile to check this project quickly.\"}"
+}
+
+{
+  "type": "SEARCH_RAG",
+  "data": "build command",
+  "content": "{\"workspace\":\"{WORKSPACE}\",\"maxMatches\":5}"
+}
+
+{
+  "type": "ADD_GLOBAL_RAG",
+  "data": "maven-location",
+  "content": "Maven is available at C:\\Program Files\\JetBrains\\IntelliJIdea2025.2\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd"
+}
+
 Правила по полям:
 - "plan" присылай только в первом ответе.
 - "taskTarget" — номер текущего шага из plan, начиная с 1. Присылай всегда, кроме ответа с type "END".

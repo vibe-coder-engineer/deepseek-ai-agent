@@ -10,6 +10,7 @@ import ru.sibgatulinanton.files.FileOperationService;
 import ru.sibgatulinanton.logging.ConsoleLogger;
 import ru.sibgatulinanton.os.cmd.CommandFailureDetector;
 import ru.sibgatulinanton.os.cmd.LocalCommandService;
+import ru.sibgatulinanton.rag.RagOperationService;
 
 import java.util.List;
 
@@ -25,6 +26,7 @@ public class DeepSeekDialogRunner {
     private final LocalCommandService commandService;
     private final CommandFailureDetector failureDetector;
     private final FileOperationService fileOperationService;
+    private final RagOperationService ragOperationService;
 
     public DeepSeekDialogRunner(ConsoleInput input,
                                 ConsoleLogger logger,
@@ -33,7 +35,8 @@ public class DeepSeekDialogRunner {
                                 AiResponseParser responseParser,
                                 LocalCommandService commandService,
                                 CommandFailureDetector failureDetector,
-                                FileOperationService fileOperationService) {
+                                FileOperationService fileOperationService,
+                                RagOperationService ragOperationService) {
         this.input = input;
         this.logger = logger;
         this.authGuard = authGuard;
@@ -42,6 +45,7 @@ public class DeepSeekDialogRunner {
         this.commandService = commandService;
         this.failureDetector = failureDetector;
         this.fileOperationService = fileOperationService;
+        this.ragOperationService = ragOperationService;
     }
 
     public DialogRunResult runUntilEnd(DeepSeekChatPage deepSeekPage, String initialPrompt, String task, boolean resumed) {
@@ -154,6 +158,10 @@ public class DeepSeekDialogRunner {
             return executeFileOperation(type, data, content);
         }
 
+        if (isRagOperation(type)) {
+            return executeRagOperation(type, data, content);
+        }
+
         if ("TEXT".equals(type)) {
             return OperationResult.continueWithoutPrompt();
         }
@@ -184,6 +192,17 @@ public class DeepSeekDialogRunner {
                 || "READ_FILE".equals(type);
     }
 
+    private boolean isRagOperation(String type) {
+        return "ADD_RAG".equals(type)
+                || "REMOVE_RAG".equals(type)
+                || "SEARCH_RAG".equals(type)
+                || "LIST_RAG".equals(type)
+                || "ADD_GLOBAL_RAG".equals(type)
+                || "REMOVE_GLOBAL_RAG".equals(type)
+                || "SEARCH_GLOBAL_RAG".equals(type)
+                || "LIST_GLOBAL_RAG".equals(type);
+    }
+
     private OperationResult executeFileOperation(String type, String data, String content) {
         String result;
         if ("CREATE_FOLDER".equals(type) || "CREATE_AND_SAVE_FOLDER".equals(type)) {
@@ -198,6 +217,37 @@ public class DeepSeekDialogRunner {
 
         logger.block("FILE_OPERATION_RESULT", result);
         if ("READ_FILE".equals(type) || result.startsWith("FILE_OPERATION_ERROR")) {
+            return OperationResult.nextPrompt(result);
+        }
+        return OperationResult.continueWithoutPrompt();
+    }
+
+    private OperationResult executeRagOperation(String type, String data, String content) {
+        String result;
+        if ("ADD_RAG".equals(type)) {
+            result = ragOperationService.add(data, content);
+        } else if ("ADD_GLOBAL_RAG".equals(type)) {
+            result = ragOperationService.addGlobal(data, content);
+        } else if ("REMOVE_RAG".equals(type)) {
+            result = ragOperationService.remove(data, content);
+        } else if ("REMOVE_GLOBAL_RAG".equals(type)) {
+            result = ragOperationService.removeGlobal(data);
+        } else if ("SEARCH_RAG".equals(type)) {
+            result = ragOperationService.search(data, content);
+        } else if ("SEARCH_GLOBAL_RAG".equals(type)) {
+            result = ragOperationService.searchGlobal(data, content);
+        } else if ("LIST_GLOBAL_RAG".equals(type)) {
+            result = ragOperationService.listGlobal(content);
+        } else {
+            result = ragOperationService.list(content);
+        }
+
+        logger.block("RAG_OPERATION_RESULT", result);
+        if ("SEARCH_RAG".equals(type)
+                || "LIST_RAG".equals(type)
+                || "SEARCH_GLOBAL_RAG".equals(type)
+                || "LIST_GLOBAL_RAG".equals(type)
+                || result.startsWith("RAG_OPERATION_ERROR")) {
             return OperationResult.nextPrompt(result);
         }
         return OperationResult.continueWithoutPrompt();

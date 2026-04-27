@@ -39,3 +39,4 @@ out/
 target
 .runtime/
 edge_profile_deepseek
+.rag/

@@ -25,6 +25,7 @@ import ru.sibgatulinanton.os.cmd.LocalCommandExecutorFactory;
 import ru.sibgatulinanton.os.cmd.LocalCommandService;
 import ru.sibgatulinanton.prompts.FirstPromptBuilder;
 import ru.sibgatulinanton.prompts.PromptLoader;
+import ru.sibgatulinanton.rag.RagOperationService;
 
 import java.nio.file.Paths;
 import java.util.Scanner;
@@ -75,6 +76,7 @@ public class App {
         DeepSeekAuthGuard authGuard = new DeepSeekAuthGuard(input, logger);
         LocalCommandExecutor executor = new LocalCommandExecutorFactory().create(osType);
         LocalCommandService commandService = new LocalCommandService(executor);
+        java.nio.file.Path workspace = Paths.get(System.getProperty("user.dir"));
         DeepSeekDialogRunner dialogRunner = new DeepSeekDialogRunner(
                 input,
                 logger,
@@ -83,7 +85,8 @@ public class App {
                 new AiResponseParser(),
                 commandService,
                 new CommandFailureDetector(),
-                new FileOperationService(Paths.get(System.getProperty("user.dir")))
+                new FileOperationService(workspace),
+                new RagOperationService(workspace)
         );
 
         return new AppRuntime(input,
