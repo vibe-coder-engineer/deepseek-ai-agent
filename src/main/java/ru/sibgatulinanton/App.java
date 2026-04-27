@@ -59,7 +59,7 @@ public class App {
             if (args.isExecMode()) {
                 runExecMode(args, manager, deepSeekPage, runtime, osType);
                 logger.info("Exec mode completed. Exit.");
-                return;
+                System.exit(0);
             }
 
             runInteractiveMode(manager, deepSeekPage, runtime, osType);
