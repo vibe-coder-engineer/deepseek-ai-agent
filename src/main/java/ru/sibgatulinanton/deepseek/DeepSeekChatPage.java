@@ -12,7 +12,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class DeepSeekChatPage {
+
     private static final Pattern CHAT_ID_PATTERN = Pattern.compile("/a/chat/s/([0-9a-fA-F-]+)");
+    private static final String FORMAT_CHARACTERS = "\\p{Cf}";
+    private static final String WHITESPACE_CHARACTERS = "[\\s\\p{Zs}]+";
 
     private final BrowserDriverManager browserManager;
     private final DeepSeekElements elements;
@@ -94,18 +97,18 @@ public class DeepSeekChatPage {
         for (int attempt = 1; attempt <= 3; attempt++) {
             js.executeScript("arguments[0].value = '';", textArea);
             js.executeScript(
-                    "arguments[0].value = arguments[1];" +
-                            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));" +
-                            "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));" +
-                            "arguments[0].dispatchEvent(new Event('keyup', { bubbles: true }));" +
-                            "arguments[0].focus();",
+                    "arguments[0].value = arguments[1];"
+                            + "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));"
+                            + "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));"
+                            + "arguments[0].dispatchEvent(new Event('keyup', { bubbles: true }));"
+                            + "arguments[0].focus();",
                     textArea,
                     prompt
             );
 
-            try { Thread.sleep(120); } catch (InterruptedException ignored) {}
+            sleep(120);
             textArea.sendKeys(" ");
-            try { Thread.sleep(120); } catch (InterruptedException ignored) {}
+            sleep(120);
 
             String actualValue = (String) js.executeScript("return arguments[0].value;", textArea);
             String actualNorm = normalizePromptForCompare(actualValue);
@@ -116,7 +119,9 @@ public class DeepSeekChatPage {
                 return true;
             }
 
-            System.out.println("[WARN] Prompt mismatch. attempt=" + attempt + ", expectedNorm=" + promptNorm + ", actualNorm=" + actualNorm);
+            System.out.println("[WARN] Prompt mismatch. attempt=" + attempt
+                    + ", expectedNorm=" + promptNorm
+                    + ", actualNorm=" + actualNorm);
         }
 
         return false;
@@ -128,11 +133,10 @@ public class DeepSeekChatPage {
         }
 
         return value
-                .replace('\u00A0', ' ')
-                .replace("\u200B", "")
                 .replace("\r", " ")
                 .replace("\n", " ")
-                .replaceAll("\\s+", " ")
+                .replaceAll(FORMAT_CHARACTERS, "")
+                .replaceAll(WHITESPACE_CHARACTERS, " ")
                 .trim();
     }
 
@@ -158,7 +162,7 @@ public class DeepSeekChatPage {
             e.printStackTrace();
         }
 
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        sleep(1000);
     }
 
     public boolean isRepeatButtonVisibleForLastResponse() {
@@ -185,13 +189,16 @@ public class DeepSeekChatPage {
             e.printStackTrace();
         }
 
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        sleep(1000);
     }
 
     public boolean isCopyButtonEnabledForLastResponse() {
         try {
             WebElement copyButton = browserManager.getDriver().findElement(
-                    By.xpath("(//div[contains(@class, 'ds-markdown')])[last()]/ancestor::div[contains(@class, 'message')]//button[@role='button' and not(@disabled)]//span[contains(text(), 'Копировать') or contains(text(), 'Copy')]/ancestor::button[@role='button' and not(@disabled)]")
+                    By.xpath("(//div[contains(@class, 'ds-markdown')])[last()]/ancestor::div[contains(@class, 'message')]"
+                            + "//button[@role='button' and not(@disabled)]"
+                            + "//span[contains(text(), 'Копировать') or contains(text(), 'Copy')]"
+                            + "/ancestor::button[@role='button' and not(@disabled)]")
             );
             return copyButton.isEnabled() && copyButton.isDisplayed();
         } catch (Exception e) {
@@ -207,14 +214,14 @@ public class DeepSeekChatPage {
                 break;
             }
             System.out.println("[WARN] Prompt not inserted (" + attempt + "/3), retry...");
-            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+            sleep(300);
         }
 
         if (!inserted) {
             System.out.println("[WARN] Prompt verification failed. Continue send attempt anyway.");
         }
 
-        try { Thread.sleep(500); } catch (InterruptedException e) { throw new RuntimeException(e); }
+        sleep(500);
 
         browserManager.getWait().until(ExpectedConditions.presenceOfElementLocated(
                 By.xpath("//div[@style='width: fit-content;']/div[@role='button' and @aria-disabled='false']")
@@ -222,12 +229,18 @@ public class DeepSeekChatPage {
 
         WebElement sendButton;
         try {
-            sendButton = browserManager.getDriver().findElement(By.xpath("//div[@style='width: fit-content;']/div[@role='button' and @aria-disabled='false']"));
+            sendButton = browserManager.getDriver().findElement(
+                    By.xpath("//div[@style='width: fit-content;']/div[@role='button' and @aria-disabled='false']")
+            );
         } catch (Exception e) {
             try {
-                sendButton = browserManager.getDriver().findElement(By.xpath("//div[contains(@class, '_52c986b') and @role='button' and @aria-disabled='false']"));
+                sendButton = browserManager.getDriver().findElement(
+                        By.xpath("//div[contains(@class, '_52c986b') and @role='button' and @aria-disabled='false']")
+                );
             } catch (Exception ex) {
-                sendButton = browserManager.getDriver().findElement(By.xpath("//div[@role='button']//path[contains(@d, 'M8.3125 0.981587')]/ancestor::div[@role='button']"));
+                sendButton = browserManager.getDriver().findElement(
+                        By.xpath("//div[@role='button']//path[contains(@d, 'M8.3125 0.981587')]/ancestor::div[@role='button']")
+                );
             }
         }
 
@@ -271,7 +284,6 @@ public class DeepSeekChatPage {
 
             System.out.println("[OK] Response started");
             Thread.sleep(500);
-
         } catch (Exception e) {
             System.out.println("[WARN] Failed to detect response start: " + e.getMessage());
         }
@@ -283,7 +295,6 @@ public class DeepSeekChatPage {
         int maxWaitSeconds = 180;
         int waitedSeconds = 0;
         boolean copyButtonWasEnabled = false;
-
         int lastResponseLength = -1;
         int stableLengthChecks = 0;
 
@@ -346,16 +357,11 @@ public class DeepSeekChatPage {
                         return;
                     }
                 }
-
             } catch (Exception e) {
                 copyButtonWasEnabled = false;
             }
 
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
+            sleep(500);
             waitedSeconds++;
 
             if (waitedSeconds % 10 == 0) {
@@ -428,5 +434,13 @@ public class DeepSeekChatPage {
         waitForResponseComplete();
 
         return getResponse();
+    }
+
+    private void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

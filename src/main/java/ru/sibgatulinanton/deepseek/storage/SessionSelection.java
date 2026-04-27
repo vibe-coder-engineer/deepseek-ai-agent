@@ -1,7 +1,5 @@
 package ru.sibgatulinanton.deepseek.storage;
 
-import ru.sibgatulinanton.App;
-
 public class SessionSelection {
 
     public static SessionSelection newSession() {

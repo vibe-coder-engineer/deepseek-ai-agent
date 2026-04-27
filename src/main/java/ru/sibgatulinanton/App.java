@@ -1,64 +1,224 @@
 package ru.sibgatulinanton;
 
-import org.apache.commons.lang3.StringEscapeUtils;
-import org.json.JSONArray;
-import org.json.JSONObject;
+import ru.sibgatulinanton.cli.AppArguments;
+import ru.sibgatulinanton.cli.ConsoleInput;
 import ru.sibgatulinanton.deepseek.BrowserDriverManager;
+import ru.sibgatulinanton.deepseek.DeepSeekAuthGuard;
 import ru.sibgatulinanton.deepseek.DeepSeekChatPage;
+import ru.sibgatulinanton.deepseek.DeepSeekUrlFactory;
+import ru.sibgatulinanton.deepseek.dialog.AiResponseParser;
+import ru.sibgatulinanton.deepseek.dialog.DeepSeekDialogRunner;
 import ru.sibgatulinanton.deepseek.dialog.DialogRunResult;
-import ru.sibgatulinanton.deepseek.storage.SessionInfo;
+import ru.sibgatulinanton.deepseek.dialog.PostDialogAction;
+import ru.sibgatulinanton.deepseek.dialog.PostDialogMenu;
+import ru.sibgatulinanton.deepseek.storage.SessionConsoleController;
+import ru.sibgatulinanton.deepseek.storage.SessionController;
 import ru.sibgatulinanton.deepseek.storage.SessionSelection;
-import ru.sibgatulinanton.lang.Language;
+import ru.sibgatulinanton.files.FileOperationService;
+import ru.sibgatulinanton.logging.ConsoleLogger;
 import ru.sibgatulinanton.os.OSType;
 import ru.sibgatulinanton.os.OSUtils;
+import ru.sibgatulinanton.os.cmd.CommandFailureDetector;
 import ru.sibgatulinanton.os.cmd.CompleteCmd;
+import ru.sibgatulinanton.os.cmd.LocalCommandExecutor;
+import ru.sibgatulinanton.os.cmd.LocalCommandExecutorFactory;
+import ru.sibgatulinanton.os.cmd.LocalCommandService;
+import ru.sibgatulinanton.prompts.FirstPromptBuilder;
 import ru.sibgatulinanton.prompts.PromptLoader;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class App {
 
-    private static final String CONTINUE_PROMPT = "continue";
-    private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
-    private static final Path VIBE_DIR = Paths.get(System.getProperty("user.home"), ".vibecoder");
-    private static final Path SESSIONS_DIR = VIBE_DIR.resolve("sessions");
-    private static final Path CURRENT_SESSION_FILE = VIBE_DIR.resolve("current-session.txt");
-
     public static void main(String[] args) {
-        boolean headless = hasArg(args, "--headless");
-        String execPromptArg = getArgValue(args, "--exec");
-        String threadArg = getArgValue(args, "--thread");
+        new App().run(AppArguments.parse(args));
+    }
 
-        boolean execMode = execPromptArg != null && !execPromptArg.trim().isEmpty();
+    private void run(AppArguments args) {
+        ConsoleLogger logger = new ConsoleLogger();
+        OSType osType = OSUtils.getOperatingSystemType();
+        SessionController sessions = new SessionController();
+        sessions.ensureStorage();
 
-        log("INFO", "DeepSeek agent started in console mode");
-        log("INFO", "Browser mode: " + (headless ? "headless" : "headed"));
-        if (execMode) {
-            log("INFO", "Exec mode enabled");
+        logger.info("DeepSeek agent started in console mode");
+        logger.info("Browser mode: " + (args.isHeadless() ? "headless" : "headed"));
+        if (args.isExecMode()) {
+            logger.info("Exec mode enabled");
         }
 
-        String currentDir = System.getProperty("user.dir");
-        OSType osType = OSUtils.getOperatingSystemType();
-
-        ensureStorage();
-
-        PromptLoader promptLoader = new PromptLoader();
-        BrowserDriverManager manager = new BrowserDriverManager(headless);
+        BrowserDriverManager manager = new BrowserDriverManager(args.isHeadless());
         AtomicBoolean driverClosed = new AtomicBoolean(false);
+        registerShutdownHook(manager, driverClosed);
+
+        try (Scanner scanner = new Scanner(System.in)) {
+            AppRuntime runtime = createRuntime(scanner, logger, sessions, osType);
+            DeepSeekChatPage deepSeekPage = new DeepSeekChatPage(manager);
+
+            if (args.isExecMode()) {
+                runExecMode(args, manager, deepSeekPage, runtime, osType);
+                logger.info("Exec mode completed. Exit.");
+                return;
+            }
+
+            runInteractiveMode(manager, deepSeekPage, runtime, osType);
+            logger.info("App finished. Press Enter to exit.");
+            runtime.input.waitEnter();
+        } finally {
+            safeQuit(manager, driverClosed);
+        }
+    }
+
+    private AppRuntime createRuntime(Scanner scanner, ConsoleLogger logger, SessionController sessions, OSType osType) {
+        ConsoleInput input = new ConsoleInput(scanner);
+        DeepSeekAuthGuard authGuard = new DeepSeekAuthGuard(input, logger);
+        LocalCommandExecutor executor = new LocalCommandExecutorFactory().create(osType);
+        LocalCommandService commandService = new LocalCommandService(executor);
+        DeepSeekDialogRunner dialogRunner = new DeepSeekDialogRunner(
+                input,
+                logger,
+                authGuard,
+                sessions,
+                new AiResponseParser(),
+                commandService,
+                new CommandFailureDetector(),
+                new FileOperationService(Paths.get(System.getProperty("user.dir")))
+        );
+
+        return new AppRuntime(input,
+                authGuard,
+                dialogRunner,
+                new SessionConsoleController(sessions, input, logger),
+                new PostDialogMenu(input, logger),
+                new FirstPromptBuilder(new PromptLoader()),
+                new DeepSeekUrlFactory());
+    }
+
+    private void runExecMode(AppArguments args,
+                             BrowserDriverManager manager,
+                             DeepSeekChatPage deepSeekPage,
+                             AppRuntime runtime,
+                             OSType osType) {
+        String execPrompt = args.getExecPrompt();
+        if (args.hasThread()) {
+            manager.openUrl(runtime.urlFactory.toThreadUrl(args.getThread()));
+            runtime.authGuard.ensureLoggedInOrWait(deepSeekPage, "exec-thread");
+        } else {
+            manager.openDeepSeek();
+            runtime.authGuard.ensureLoggedInOrWait(deepSeekPage, "exec");
+            execPrompt = runtime.promptBuilder.build(args.getExecPrompt(), osType, System.getProperty("user.dir"));
+        }
+
+        manager.driverWait(30);
+        runtime.dialogRunner.runUntilEnd(deepSeekPage, execPrompt, args.getExecPrompt(), args.hasThread());
+    }
+
+    private void runInteractiveMode(BrowserDriverManager manager,
+                                    DeepSeekChatPage deepSeekPage,
+                                    AppRuntime runtime,
+                                    OSType osType) {
+        manager.openDeepSeek();
+        runtime.authGuard.ensureLoggedInOrWait(deepSeekPage, "startup");
+        manager.driverWait(30);
+
+        InteractiveState state = new InteractiveState();
+        boolean appRunning = true;
+        while (appRunning) {
+            prepareDialogState(manager, deepSeekPage, runtime, osType, state);
+            if (state.selection == null) {
+                break;
+            }
+
+            DialogRunResult runResult = runtime.dialogRunner.runUntilEnd(
+                    deepSeekPage,
+                    state.prompt,
+                    state.task,
+                    state.selection.isResume()
+            );
+            state.updateActiveChatId(runResult.getActiveChatId());
+
+            appRunning = handlePostDialogAction(manager, deepSeekPage, runtime, state);
+        }
+    }
+
+    private void prepareDialogState(BrowserDriverManager manager,
+                                    DeepSeekChatPage deepSeekPage,
+                                    AppRuntime runtime,
+                                    OSType osType,
+                                    InteractiveState state) {
+        if (state.selection != null) {
+            return;
+        }
+
+        state.selection = runtime.sessionsMenu.chooseSession();
+        if (state.selection == null) {
+            return;
+        }
+
+        if (state.selection.isResume()) {
+            manager.openUrl(state.selection.getSession().getUrl());
+            runtime.authGuard.ensureLoggedInOrWait(deepSeekPage, "resume");
+            state.task = state.selection.getSession().getTask();
+            state.activeChatId = state.selection.getSession().getChatId();
+            state.prompt = askPromptOrContinue(runtime, "Enter message for resumed dialog (Enter = 'continue'): ");
+            return;
+        }
+
+        state.task = runtime.input.askLine("Enter task for DeepSeek: ");
+        if (state.task.trim().isEmpty()) {
+            state.task = AppConstants.DEFAULT_TASK;
+        }
+        state.prompt = runtime.promptBuilder.build(state.task, osType, System.getProperty("user.dir"));
+    }
+
+    private boolean handlePostDialogAction(BrowserDriverManager manager,
+                                           DeepSeekChatPage deepSeekPage,
+                                           AppRuntime runtime,
+                                           InteractiveState state) {
+        PostDialogAction action = runtime.postDialogMenu.askAction();
+        if (PostDialogAction.CONTINUE.equals(action)) {
+            openActiveDialog(manager, deepSeekPage, runtime, state.activeChatId);
+            state.prompt = askPromptOrContinue(runtime, "Enter message for this dialog (Enter = 'continue'): ");
+            return true;
+        }
+
+        if (PostDialogAction.NEW_DIALOG.equals(action)) {
+            state.reset();
+            manager.openDeepSeek();
+            runtime.authGuard.ensureLoggedInOrWait(deepSeekPage, "new dialog");
+            return true;
+        }
+
+        if (PostDialogAction.DELETE_DIALOG.equals(action)) {
+            runtime.sessionsMenu.deleteDialog(state.activeChatId);
+            state.reset();
+            manager.openDeepSeek();
+            runtime.authGuard.ensureLoggedInOrWait(deepSeekPage, "after delete");
+            return true;
+        }
+
+        return false;
+    }
+
+    private void openActiveDialog(BrowserDriverManager manager,
+                                  DeepSeekChatPage deepSeekPage,
+                                  AppRuntime runtime,
+                                  String activeChatId) {
+        if (activeChatId == null || activeChatId.trim().isEmpty()) {
+            return;
+        }
+
+        manager.openUrl(runtime.urlFactory.toThreadUrl(activeChatId));
+        runtime.authGuard.ensureLoggedInOrWait(deepSeekPage, "post-end continue");
+    }
+
+    private String askPromptOrContinue(AppRuntime runtime, String promptText) {
+        String prompt = runtime.input.askLine(promptText);
+        return prompt.trim().isEmpty() ? AppConstants.CONTINUE_PROMPT : prompt;
+    }
+
+    private void registerShutdownHook(final BrowserDriverManager manager, final AtomicBoolean driverClosed) {
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             @Override
             public void run() {
@@ -66,262 +226,9 @@ public class App {
                 CompleteCmd.closePowerShell();
             }
         }, "deepseek-driver-shutdown"));
-
-        try (Scanner scanner = new Scanner(System.in)) {
-            DeepSeekChatPage deepSeekPage = new DeepSeekChatPage(manager);
-
-            if (execMode) {
-                String execPrompt = execPromptArg;
-                if (threadArg != null && !threadArg.trim().isEmpty()) {
-                    manager.openUrl(toThreadUrl(threadArg.trim()));
-                    ensureLoggedInOrWait(scanner, deepSeekPage, "exec-thread");
-                } else {
-                    manager.openDeepSeek();
-                    ensureLoggedInOrWait(scanner, deepSeekPage, "exec");
-                    execPrompt = buildFirstPrompt(promptLoader, execPromptArg, osType, currentDir);
-                }
-
-                manager.driverWait(30);
-                runDialogUntilEnd(scanner, deepSeekPage, osType, execPrompt, execPromptArg, threadArg != null && !threadArg.trim().isEmpty());
-                log("INFO", "Exec mode completed. Exit.");
-                return;
-            }
-
-            manager.openDeepSeek();
-            ensureLoggedInOrWait(scanner, deepSeekPage, "startup");
-            manager.driverWait(30);
-
-            boolean appRunning = true;
-            SessionSelection selection = null;
-            String task = null;
-            String prompt = null;
-            String activeChatId = null;
-
-            while (appRunning) {
-                if (selection == null) {
-                    selection = chooseSession(scanner, manager, deepSeekPage);
-                    if (selection == null) {
-                        break;
-                    }
-
-                    if (selection.isResume()) {
-                        manager.openUrl(selection.getSession().getUrl());
-                        ensureLoggedInOrWait(scanner, deepSeekPage, "resume");
-
-                        task = selection.getSession().getTask();
-                        activeChatId = selection.getSession().getChatId();
-
-                        prompt = askLine(scanner, "Enter message for resumed dialog (Enter = 'continue'): ");
-                        if (prompt.trim().isEmpty()) {
-                            prompt = CONTINUE_PROMPT;
-                        }
-
-                        saveSession(selection.getSession().getChatId(), selection.getSession().getUrl(), task, true);
-                    } else {
-                        task = askLine(scanner, "Enter task for DeepSeek: ");
-                        if (task.trim().isEmpty()) {
-                            task = "Write hello world in Java";
-                        }
-
-                        prompt = buildFirstPrompt(promptLoader, task, osType, currentDir);
-                    }
-                }
-                DialogRunResult runResult = runDialogUntilEnd(scanner, deepSeekPage, osType, prompt, task, selection.isResume());
-                if (runResult.getActiveChatId() != null && !runResult.getActiveChatId().trim().isEmpty()) {
-                    activeChatId = runResult.getActiveChatId();
-                }
-
-                String action = askPostEndAction(scanner);
-                if ("1".equals(action)) {
-                    if (activeChatId != null && !activeChatId.trim().isEmpty()) {
-                        manager.openUrl(BrowserDriverManager.CHAT_DEEPSEEK_LINK + "/a/chat/s/" + activeChatId);
-                        ensureLoggedInOrWait(scanner, deepSeekPage, "post-end continue");
-                    }
-
-                    prompt = askLine(scanner, "Enter message for this dialog (Enter = 'continue'): ");
-                    if (prompt.trim().isEmpty()) {
-                        prompt = CONTINUE_PROMPT;
-                    }
-                    continue;
-                }
-
-                if ("2".equals(action)) {
-                    selection = null;
-                    task = null;
-                    prompt = null;
-                    activeChatId = null;
-                    manager.openDeepSeek();
-                    ensureLoggedInOrWait(scanner, deepSeekPage, "new dialog");
-                    continue;
-                }
-
-                if ("3".equals(action)) {
-                    deleteDialogFlow(scanner, activeChatId);
-                    selection = null;
-                    task = null;
-                    prompt = null;
-                    activeChatId = null;
-                    manager.openDeepSeek();
-                    ensureLoggedInOrWait(scanner, deepSeekPage, "after delete");
-                    continue;
-                }
-
-                appRunning = false;
-            }
-
-            log("INFO", "App finished. Press Enter to exit.");
-            scanner.nextLine();
-        } finally {
-            safeQuit(manager, driverClosed);
-        }
     }
 
-    private static DialogRunResult runDialogUntilEnd(Scanner scanner,
-                                                     DeepSeekChatPage deepSeekPage,
-                                                     OSType osType,
-                                                     String initialPrompt,
-                                                     String task,
-                                                     boolean resumed) {
-        String prompt = initialPrompt;
-        String activeChatId = null;
-        boolean isEnd = false;
-        int consecutiveStepFailures = 0;
-
-        while (!isEnd) {
-            boolean promptExists = false;
-            ensureLoggedInOrWait(scanner, deepSeekPage, "before send");
-
-            logBlock("PROMPT_TO_AI", prompt);
-
-            String rawResponse;
-            try {
-                rawResponse = deepSeekPage.askDeepSeek(prompt);
-            } catch (RuntimeException ex) {
-                consecutiveStepFailures++;
-                String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
-                if (msg.contains("авториз") || msg.contains("not authorized")) {
-                    log("WARN", "DeepSeek session is not authorized. Re-login in browser and press Enter.");
-                    scanner.nextLine();
-                    ensureLoggedInOrWait(scanner, deepSeekPage, "retry after unauthorized");
-                } else {
-                    log("WARN", "Step failed: " + ex.getMessage());
-                }
-
-                if (consecutiveStepFailures > 20) {
-                    log("WARN", "Too many failures. Reset counter and keep retrying same step.");
-                    consecutiveStepFailures = 0;
-                }
-                continue;
-            }
-            consecutiveStepFailures = 0;
-
-            logBlock("AI_RAW_RESPONSE", rawResponse);
-
-            String currentChatId = deepSeekPage.getChatIdFromCurrentUrl();
-            String currentUrl = deepSeekPage.getCurrentUrl();
-            if (currentChatId != null && !currentChatId.trim().isEmpty()) {
-                activeChatId = currentChatId;
-                saveSession(activeChatId, currentUrl, task, resumed);
-                log("INFO", "Session saved: chatId=" + activeChatId);
-            }
-
-            String response = cleanResponse(rawResponse);
-            logBlock("AI_CLEAN_RESPONSE", response);
-
-            JSONObject jsonObject = extractJsonObject(response);
-            if (jsonObject == null) {
-                log("ERROR", "Failed to parse AI response as JSON payload");
-                continue;
-            }
-
-            JSONArray operations = jsonObject.optJSONArray("operations");
-            if (operations == null) {
-                if (jsonObject.has("type")) {
-                    operations = new JSONArray();
-                    JSONObject singleOperation = new JSONObject();
-                    singleOperation.put("type", jsonObject.optString("type", ""));
-                    singleOperation.put("data", jsonObject.optString("data", ""));
-                    if (jsonObject.has("content") && !jsonObject.isNull("content")) {
-                        singleOperation.put("content", jsonObject.get("content"));
-                    }
-                    operations.put(singleOperation);
-                } else {
-                    log("ERROR", "AI response doesn't contain operations[] or top-level type");
-                    continue;
-                }
-            }
-
-            for (int i = 0; i < operations.length(); i++) {
-                JSONObject operation = operations.getJSONObject(i);
-                String type = operation.optString("type", "");
-                String data = operation.optString("data", "");
-                String content = operation.has("content") && !operation.isNull("content")
-                        ? StringEscapeUtils.escapeEcmaScript(operation.getString("content"))
-                        : null;
-
-                if ("END".equals(type)) {
-                    isEnd = true;
-                    logBlock("AI_END", content == null ? "<empty>" : content);
-                    break;
-                }
-
-                if ("CMD".equals(type) || "CMD_WAIT".equals(type)) {
-                    if (content != null) {
-                        data = data.replace("%s", content);
-                    }
-
-                    logBlock("LOCAL_COMMAND", data);
-                    String cmdResult = runLocalCommandWithCapture(data, osType);
-                    logBlock("LOCAL_COMMAND_RESULT", cmdResult);
-
-                    if ("CMD_WAIT".equals(type) || isCommandFailed(cmdResult)) {
-                        prompt = (cmdResult == null || cmdResult.trim().isEmpty()) ? CONTINUE_PROMPT : cmdResult;
-                        promptExists = true;
-                    }
-                    continue;
-                }
-
-                if ("TEXT".equals(type)) {
-                    continue;
-                }
-
-                log("WARN", "Unknown operation type: " + type);
-            }
-
-            if (!promptExists && !isEnd) {
-                prompt = CONTINUE_PROMPT;
-            }
-        }
-
-        return new DialogRunResult(activeChatId);
-    }
-
-    private static String askPostEndAction(Scanner scanner) {
-        log("INFO", "Dialog finished. Choose action:");
-        log("INFO", "1 - continue this dialog");
-        log("INFO", "2 - start new dialog");
-        log("INFO", "3 - delete dialog(s)");
-        log("INFO", "4 - exit");
-
-        String action = askLine(scanner, "Enter action (1/2/3/4): ").trim();
-        if (!"1".equals(action) && !"2".equals(action) && !"3".equals(action) && !"4".equals(action)) {
-            return "4";
-        }
-        return action;
-    }
-
-    private static String runLocalCommandWithCapture(String command, OSType osType) {
-        try {
-            return OSType.WINDOWS.equals(osType)
-                    ? CompleteCmd.executePowerShell(command + "\n")
-                    : CompleteCmd.executeCommand(command);
-        } catch (Exception ex) {
-            String error = ex.getMessage() == null ? ex.toString() : ex.getMessage();
-            return "COMMAND_ERROR\nFAILED_COMMAND:\n" + command + "\nERROR:\n" + error;
-        }
-    }
-
-    private static void safeQuit(BrowserDriverManager manager, AtomicBoolean driverClosed) {
+    private void safeQuit(BrowserDriverManager manager, AtomicBoolean driverClosed) {
         if (manager == null || driverClosed == null) {
             return;
         }
@@ -334,360 +241,51 @@ public class App {
         }
     }
 
-    private static String buildFirstPrompt(PromptLoader promptLoader, String task, OSType osType, String currentDir) {
-        String firstPromptTemplate = promptLoader.getPrompt(Language.RU, "first_prompt");
-        if (firstPromptTemplate == null) {
-            throw new IllegalStateException("Prompt template resources/prompts/ru/first_prompt.txt not found");
-        }
+    private static class AppRuntime {
 
-        String effectiveTask = (task == null || task.trim().isEmpty()) ? "Write hello world in Java" : task;
-        return firstPromptTemplate
-                .replace("{TASK}", effectiveTask)
-                .replace("{OS}", osType.name())
-                .replace("{WORKSPACE}", currentDir)
-                .replace("{CMD}", OSType.WINDOWS.equals(osType) ? "PowerShell" : "bash");
-    }
+        private final ConsoleInput input;
+        private final DeepSeekAuthGuard authGuard;
+        private final DeepSeekDialogRunner dialogRunner;
+        private final SessionConsoleController sessionsMenu;
+        private final PostDialogMenu postDialogMenu;
+        private final FirstPromptBuilder promptBuilder;
+        private final DeepSeekUrlFactory urlFactory;
 
-    private static boolean isCommandFailed(String commandResult) {
-        if (commandResult == null) {
-            return false;
-        }
-
-        String lower = commandResult.toLowerCase();
-        return lower.contains("command_error")
-                || lower.contains("exception")
-                || lower.contains("РѕС€РёР±РєР°")
-                || lower.contains("error");
-    }
-
-    private static String cleanResponse(String rawResponse) {
-        if (rawResponse == null) {
-            return "";
-        }
-
-        return rawResponse
-                .replace("```json", "")
-                .replace("```", "")
-                .replaceAll("(?im)^\\s*json\\s*$", "")
-                .replaceAll("(?im)^\\s*copy\\s*$", "")
-                .replaceAll("(?im)^\\s*download\\s*$", "")
-                .replaceAll("(?im)^\\s*РєРѕРїРёСЂРѕРІР°С‚СЊ\\s*$", "")
-                .replaceAll("(?im)^\\s*СЃРєР°С‡Р°С‚СЊ\\s*$", "")
-                .trim();
-    }
-
-    private static JSONObject extractJsonObject(String text) {
-        if (text == null) {
-            return null;
-        }
-
-        String trimmed = text.trim();
-        try {
-            return new JSONObject(trimmed);
-        } catch (Exception ignored) {
-        }
-
-        int firstBrace = trimmed.indexOf('{');
-        int lastBrace = trimmed.lastIndexOf('}');
-        if (firstBrace < 0 || lastBrace <= firstBrace) {
-            return null;
-        }
-
-        String candidate = trimmed.substring(firstBrace, lastBrace + 1).trim();
-        try {
-            return new JSONObject(candidate);
-        } catch (Exception ignored) {
-            return null;
+        AppRuntime(ConsoleInput input,
+                   DeepSeekAuthGuard authGuard,
+                   DeepSeekDialogRunner dialogRunner,
+                   SessionConsoleController sessionsMenu,
+                   PostDialogMenu postDialogMenu,
+                   FirstPromptBuilder promptBuilder,
+                   DeepSeekUrlFactory urlFactory) {
+            this.input = input;
+            this.authGuard = authGuard;
+            this.dialogRunner = dialogRunner;
+            this.sessionsMenu = sessionsMenu;
+            this.postDialogMenu = postDialogMenu;
+            this.promptBuilder = promptBuilder;
+            this.urlFactory = urlFactory;
         }
     }
 
-    private static SessionSelection chooseSession(Scanner scanner, BrowserDriverManager manager, DeepSeekChatPage deepSeekPage) {
-        while (true) {
-            List<SessionInfo> sessions = listSessions();
+    private static class InteractiveState {
 
-            log("INFO", "Choose mode:");
-            log("INFO", "1 - start NEW dialog");
-            log("INFO", "2 - RESUME existing dialog");
-            log("INFO", "3 - DELETE saved dialog");
-            log("INFO", "4 - EXIT app");
+        private SessionSelection selection;
+        private String task;
+        private String prompt;
+        private String activeChatId;
 
-            String mode = askLine(scanner, "Enter mode (1/2/3/4): ").trim();
-            if ("1".equals(mode)) {
-                return SessionSelection.newSession();
+        void updateActiveChatId(String activeChatId) {
+            if (activeChatId != null && !activeChatId.trim().isEmpty()) {
+                this.activeChatId = activeChatId;
             }
+        }
 
-            if ("2".equals(mode)) {
-                if (sessions.isEmpty()) {
-                    log("WARN", "No saved sessions found.");
-                    continue;
-                }
-
-                log("INFO", "Saved sessions:");
-                for (int i = 0; i < sessions.size(); i++) {
-                    SessionInfo s = sessions.get(i);
-                    log("INFO", (i + 1) + ") " + s.getChatId() + " | lastUsed=" + s.getLastUsedAt() + " | task=" + s.getTask());
-                }
-
-                String selected = askLine(scanner, "Enter session number: ");
-                try {
-                    int index = Integer.parseInt(selected) - 1;
-                    if (index >= 0 && index < sessions.size()) {
-                        return SessionSelection.resume(sessions.get(index));
-                    }
-                } catch (Exception ignored) {
-                }
-
-                log("WARN", "Invalid session number.");
-                continue;
-            }
-
-            if ("3".equals(mode)) {
-                deleteDialogFlow(scanner, null);
-                manager.openDeepSeek();
-                ensureLoggedInOrWait(scanner, deepSeekPage, "after delete");
-                continue;
-            }
-
-            if ("4".equals(mode)) {
-                return null;
-            }
-
-            log("WARN", "Unknown mode.");
+        void reset() {
+            selection = null;
+            task = null;
+            prompt = null;
+            activeChatId = null;
         }
     }
-
-    private static void deleteDialogFlow(Scanner scanner, String preferredChatId) {
-        List<SessionInfo> sessions = listSessions();
-        if (sessions.isEmpty()) {
-            log("WARN", "No saved dialogs to delete.");
-            return;
-        }
-
-        log("INFO", "Delete dialog mode:");
-        for (int i = 0; i < sessions.size(); i++) {
-            SessionInfo s = sessions.get(i);
-            String mark = (preferredChatId != null && preferredChatId.equals(s.getChatId())) ? " *current" : "";
-            log("INFO", (i + 1) + ") " + s.getChatId() + mark + " | lastUsed=" + s.getLastUsedAt() + " | task=" + s.getTask());
-        }
-
-        String selected = askLine(scanner, "Enter number to delete (or empty to cancel): ").trim();
-        if (selected.isEmpty()) {
-            log("INFO", "Delete canceled.");
-            return;
-        }
-
-        try {
-            int index = Integer.parseInt(selected) - 1;
-            if (index < 0 || index >= sessions.size()) {
-                log("WARN", "Invalid selection.");
-                return;
-            }
-
-            SessionInfo target = sessions.get(index);
-            Path file = SESSIONS_DIR.resolve(target.getChatId() + ".json");
-            if (Files.exists(file)) {
-                Files.delete(file);
-                log("INFO", "Dialog deleted: " + target.getChatId());
-            } else {
-                log("WARN", "Dialog file not found: " + file);
-            }
-
-            try {
-                if (Files.exists(CURRENT_SESSION_FILE)) {
-                    String current = new String(Files.readAllBytes(CURRENT_SESSION_FILE), StandardCharsets.UTF_8).trim();
-                    if (target.getChatId().equals(current)) {
-                        Files.delete(CURRENT_SESSION_FILE);
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        } catch (Exception e) {
-            log("WARN", "Delete failed: " + e.getMessage());
-        }
-    }
-
-    private static List<SessionInfo> listSessions() {
-        List<SessionInfo> sessions = new ArrayList<SessionInfo>();
-        if (!Files.exists(SESSIONS_DIR)) {
-            return sessions;
-        }
-
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(SESSIONS_DIR, "*.json")) {
-            for (Path file : stream) {
-                try {
-                    String content = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
-                    JSONObject json = new JSONObject(content);
-
-                    SessionInfo info = new SessionInfo(json.optString("chatId", ""),
-                            json.optString("url", ""),
-                            json.optString("task", ""),
-                            json.optString("lastUsedAt", "")
-                    );
-
-                    if (!info.getChatId().isEmpty() && !info.getUrl().isEmpty()) {
-                        sessions.add(info);
-                    }
-                } catch (Exception e) {
-                    log("WARN", "Failed to read session file: " + file + ". " + e.getMessage());
-                }
-            }
-        } catch (IOException e) {
-            log("WARN", "Failed to list sessions: " + e.getMessage());
-        }
-
-        sessions.sort(new Comparator<SessionInfo>() {
-            @Override
-            public int compare(SessionInfo a, SessionInfo b) {
-                return b.getLastUsedAt().compareTo(a.getLastUsedAt());
-            }
-        });
-
-        return sessions;
-    }
-
-    private static void ensureStorage() {
-        try {
-            Path legacyVibeDir = Paths.get(System.getProperty("user.dir"), ".vibecoder");
-            if (Files.exists(legacyVibeDir) && !legacyVibeDir.equals(VIBE_DIR) && !Files.exists(VIBE_DIR)) {
-                Files.createDirectories(VIBE_DIR.getParent());
-                Files.move(legacyVibeDir, VIBE_DIR, StandardCopyOption.REPLACE_EXISTING);
-                log("INFO", "Storage migrated: " + legacyVibeDir + " -> " + VIBE_DIR);
-            }
-            Files.createDirectories(SESSIONS_DIR);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to create .vibecoder storage", e);
-        }
-    }
-
-    private static void saveSession(String chatId, String url, String task, boolean resumed) {
-        if (chatId == null || chatId.trim().isEmpty() || url == null || url.trim().isEmpty()) {
-            return;
-        }
-
-        String now = LocalDateTime.now().format(TS);
-        Path sessionFile = SESSIONS_DIR.resolve(chatId + ".json");
-
-        JSONObject json = new JSONObject();
-        if (Files.exists(sessionFile)) {
-            try {
-                String existing = new String(Files.readAllBytes(sessionFile), StandardCharsets.UTF_8);
-                json = new JSONObject(existing);
-            } catch (Exception ignored) {
-            }
-        }
-
-        if (!json.has("createdAt")) {
-            json.put("createdAt", now);
-        }
-
-        json.put("chatId", chatId);
-        json.put("url", url);
-        json.put("task", task == null ? "" : task);
-        json.put("lastUsedAt", now);
-        json.put("resumed", resumed);
-
-        try {
-            Files.write(sessionFile, json.toString(2).getBytes(StandardCharsets.UTF_8));
-            Files.write(CURRENT_SESSION_FILE, chatId.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            log("WARN", "Failed to save session: " + e.getMessage());
-        }
-    }
-
-    private static String askLine(Scanner scanner, String prompt) {
-        System.out.print(prompt);
-        try {
-            return scanner.nextLine();
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    private static void ensureLoggedInOrWait(Scanner scanner, DeepSeekChatPage deepSeekPage, String stage) {
-        while (!deepSeekPage.isUserLoggedIn()) {
-            log("WARN", "User is NOT authenticated in DeepSeek (" + stage + "). Authenticate in browser and press Enter.");
-            scanner.nextLine();
-
-            for (int i = 0; i < 20; i++) {
-                if (deepSeekPage.isUserLoggedIn()) {
-                    break;
-                }
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException ignored) {
-                }
-            }
-        }
-        log("INFO", "User is authenticated in DeepSeek (" + stage + ")");
-    }
-
-    private static void log(String level, String message) {
-        String ts = LocalDateTime.now().format(TS);
-        System.out.println("[" + ts + "] [" + level + "] " + message);
-    }
-
-    private static void logBlock(String title, String value) {
-        String ts = LocalDateTime.now().format(TS);
-        System.out.println("[" + ts + "] [" + title + "] >>>");
-        System.out.println(value == null ? "<null>" : value);
-        System.out.println("[" + ts + "] [" + title + "] <<<");
-    }
-
-    private static boolean hasArg(String[] args, String targetArg) {
-        if (args == null || targetArg == null || targetArg.trim().isEmpty()) {
-            return false;
-        }
-
-        for (String arg : args) {
-            if (targetArg.equalsIgnoreCase(arg)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static String getArgValue(String[] args, String targetArg) {
-        if (args == null || targetArg == null || targetArg.trim().isEmpty()) {
-            return null;
-        }
-
-        String prefix = targetArg + "=";
-        for (int i = 0; i < args.length; i++) {
-            String arg = args[i];
-            if (arg == null) {
-                continue;
-            }
-
-            if (targetArg.equalsIgnoreCase(arg)) {
-                if (i + 1 < args.length) {
-                    return args[i + 1];
-                }
-                return null;
-            }
-
-            if (arg.regionMatches(true, 0, prefix, 0, prefix.length())) {
-                return arg.substring(prefix.length());
-            }
-        }
-
-        return null;
-    }
-
-    private static String toThreadUrl(String threadArg) {
-        if (threadArg == null || threadArg.trim().isEmpty()) {
-            return BrowserDriverManager.CHAT_DEEPSEEK_LINK;
-        }
-
-        String trimmed = threadArg.trim();
-        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            return trimmed;
-        }
-
-        return BrowserDriverManager.CHAT_DEEPSEEK_LINK + "/a/chat/s/" + trimmed;
-    }
-
 }
-
-
-
