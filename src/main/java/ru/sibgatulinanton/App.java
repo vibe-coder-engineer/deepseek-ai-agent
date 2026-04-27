@@ -5,6 +5,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import ru.sibgatulinanton.deepseek.BrowserDriverManager;
 import ru.sibgatulinanton.deepseek.DeepSeekChatPage;
+import ru.sibgatulinanton.deepseek.dialog.DialogRunResult;
+import ru.sibgatulinanton.deepseek.storage.SessionInfo;
+import ru.sibgatulinanton.deepseek.storage.SessionSelection;
 import ru.sibgatulinanton.lang.Language;
 import ru.sibgatulinanton.os.OSType;
 import ru.sibgatulinanton.os.OSUtils;
@@ -39,6 +42,7 @@ public class App {
         boolean headless = hasArg(args, "--headless");
         String execPromptArg = getArgValue(args, "--exec");
         String threadArg = getArgValue(args, "--thread");
+
         boolean execMode = execPromptArg != null && !execPromptArg.trim().isEmpty();
 
         log("INFO", "DeepSeek agent started in console mode");
@@ -59,6 +63,7 @@ public class App {
             @Override
             public void run() {
                 safeQuit(manager, driverClosed);
+                CompleteCmd.closePowerShell();
             }
         }, "deepseek-driver-shutdown"));
 
@@ -99,19 +104,19 @@ public class App {
                         break;
                     }
 
-                    if (selection.resume) {
-                        manager.openUrl(selection.session.url);
+                    if (selection.isResume()) {
+                        manager.openUrl(selection.getSession().getUrl());
                         ensureLoggedInOrWait(scanner, deepSeekPage, "resume");
 
-                        task = selection.session.task;
-                        activeChatId = selection.session.chatId;
+                        task = selection.getSession().getTask();
+                        activeChatId = selection.getSession().getChatId();
 
                         prompt = askLine(scanner, "Enter message for resumed dialog (Enter = 'continue'): ");
                         if (prompt.trim().isEmpty()) {
                             prompt = CONTINUE_PROMPT;
                         }
 
-                        saveSession(selection.session.chatId, selection.session.url, task, true);
+                        saveSession(selection.getSession().getChatId(), selection.getSession().getUrl(), task, true);
                     } else {
                         task = askLine(scanner, "Enter task for DeepSeek: ");
                         if (task.trim().isEmpty()) {
@@ -121,9 +126,9 @@ public class App {
                         prompt = buildFirstPrompt(promptLoader, task, osType, currentDir);
                     }
                 }
-                DialogRunResult runResult = runDialogUntilEnd(scanner, deepSeekPage, osType, prompt, task, selection.resume);
-                if (runResult.activeChatId != null && !runResult.activeChatId.trim().isEmpty()) {
-                    activeChatId = runResult.activeChatId;
+                DialogRunResult runResult = runDialogUntilEnd(scanner, deepSeekPage, osType, prompt, task, selection.isResume());
+                if (runResult.getActiveChatId() != null && !runResult.getActiveChatId().trim().isEmpty()) {
+                    activeChatId = runResult.getActiveChatId();
                 }
 
                 String action = askPostEndAction(scanner);
@@ -170,12 +175,13 @@ public class App {
             safeQuit(manager, driverClosed);
         }
     }
+
     private static DialogRunResult runDialogUntilEnd(Scanner scanner,
-                                                      DeepSeekChatPage deepSeekPage,
-                                                      OSType osType,
-                                                      String initialPrompt,
-                                                      String task,
-                                                      boolean resumed) {
+                                                     DeepSeekChatPage deepSeekPage,
+                                                     OSType osType,
+                                                     String initialPrompt,
+                                                     String task,
+                                                     boolean resumed) {
         String prompt = initialPrompt;
         String activeChatId = null;
         boolean isEnd = false;
@@ -289,6 +295,7 @@ public class App {
 
         return new DialogRunResult(activeChatId);
     }
+
     private static String askPostEndAction(Scanner scanner) {
         log("INFO", "Dialog finished. Choose action:");
         log("INFO", "1 - continue this dialog");
@@ -418,7 +425,7 @@ public class App {
                 log("INFO", "Saved sessions:");
                 for (int i = 0; i < sessions.size(); i++) {
                     SessionInfo s = sessions.get(i);
-                    log("INFO", (i + 1) + ") " + s.chatId + " | lastUsed=" + s.lastUsedAt + " | task=" + s.task);
+                    log("INFO", (i + 1) + ") " + s.getChatId() + " | lastUsed=" + s.getLastUsedAt() + " | task=" + s.getTask());
                 }
 
                 String selected = askLine(scanner, "Enter session number: ");
@@ -459,8 +466,8 @@ public class App {
         log("INFO", "Delete dialog mode:");
         for (int i = 0; i < sessions.size(); i++) {
             SessionInfo s = sessions.get(i);
-            String mark = (preferredChatId != null && preferredChatId.equals(s.chatId)) ? " *current" : "";
-            log("INFO", (i + 1) + ") " + s.chatId + mark + " | lastUsed=" + s.lastUsedAt + " | task=" + s.task);
+            String mark = (preferredChatId != null && preferredChatId.equals(s.getChatId())) ? " *current" : "";
+            log("INFO", (i + 1) + ") " + s.getChatId() + mark + " | lastUsed=" + s.getLastUsedAt() + " | task=" + s.getTask());
         }
 
         String selected = askLine(scanner, "Enter number to delete (or empty to cancel): ").trim();
@@ -477,10 +484,10 @@ public class App {
             }
 
             SessionInfo target = sessions.get(index);
-            Path file = SESSIONS_DIR.resolve(target.chatId + ".json");
+            Path file = SESSIONS_DIR.resolve(target.getChatId() + ".json");
             if (Files.exists(file)) {
                 Files.delete(file);
-                log("INFO", "Dialog deleted: " + target.chatId);
+                log("INFO", "Dialog deleted: " + target.getChatId());
             } else {
                 log("WARN", "Dialog file not found: " + file);
             }
@@ -488,7 +495,7 @@ public class App {
             try {
                 if (Files.exists(CURRENT_SESSION_FILE)) {
                     String current = new String(Files.readAllBytes(CURRENT_SESSION_FILE), StandardCharsets.UTF_8).trim();
-                    if (target.chatId.equals(current)) {
+                    if (target.getChatId().equals(current)) {
                         Files.delete(CURRENT_SESSION_FILE);
                     }
                 }
@@ -510,12 +517,14 @@ public class App {
                 try {
                     String content = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
                     JSONObject json = new JSONObject(content);
-                    SessionInfo info = new SessionInfo();
-                    info.chatId = json.optString("chatId", "");
-                    info.url = json.optString("url", "");
-                    info.task = json.optString("task", "");
-                    info.lastUsedAt = json.optString("lastUsedAt", "");
-                    if (!info.chatId.isEmpty() && !info.url.isEmpty()) {
+
+                    SessionInfo info = new SessionInfo(json.optString("chatId", ""),
+                            json.optString("url", ""),
+                            json.optString("task", ""),
+                            json.optString("lastUsedAt", "")
+                    );
+
+                    if (!info.getChatId().isEmpty() && !info.getUrl().isEmpty()) {
                         sessions.add(info);
                     }
                 } catch (Exception e) {
@@ -529,7 +538,7 @@ public class App {
         sessions.sort(new Comparator<SessionInfo>() {
             @Override
             public int compare(SessionInfo a, SessionInfo b) {
-                return b.lastUsedAt.compareTo(a.lastUsedAt);
+                return b.getLastUsedAt().compareTo(a.getLastUsedAt());
             }
         });
 
@@ -637,6 +646,7 @@ public class App {
 
         return false;
     }
+
     private static String getArgValue(String[] args, String targetArg) {
         if (args == null || targetArg == null || targetArg.trim().isEmpty()) {
             return null;
@@ -677,37 +687,6 @@ public class App {
         return BrowserDriverManager.CHAT_DEEPSEEK_LINK + "/a/chat/s/" + trimmed;
     }
 
-    private static class DialogRunResult {
-        final String activeChatId;
-
-        private DialogRunResult(String activeChatId) {
-            this.activeChatId = activeChatId;
-        }
-    }
-    private static class SessionInfo {
-        String chatId;
-        String url;
-        String task;
-        String lastUsedAt;
-    }
-
-    private static class SessionSelection {
-        final boolean resume;
-        final SessionInfo session;
-
-        private SessionSelection(boolean resume, SessionInfo session) {
-            this.resume = resume;
-            this.session = session;
-        }
-
-        static SessionSelection newSession() {
-            return new SessionSelection(false, null);
-        }
-
-        static SessionSelection resume(SessionInfo session) {
-            return new SessionSelection(true, session);
-        }
-    }
 }
 
 

@@ -5,7 +5,7 @@ import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.PageFactory;
 import org.openqa.selenium.support.ui.ExpectedConditions;
-import ru.sibgatulinanton.deepseek.dto.DeepSeekElements;
+import ru.sibgatulinanton.deepseek.elements.DeepSeekElements;
 
 import java.util.List;
 import java.util.regex.Matcher;

@@ -1,8 +1,7 @@
-package ru.sibgatulinanton.deepseek.dto;
+package ru.sibgatulinanton.deepseek.elements;
 
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
-import org.openqa.selenium.support.CacheLookup;
 
 public class DeepSeekElements {
 
@@ -63,10 +62,6 @@ public class DeepSeekElements {
     private WebElement loadingIndicator;
 
 
-    // ========== ГЕТТЕРЫ ==========
-
-
-
     public WebElement getSendButton() {
         // Возвращаем активную кнопку (не disabled)
         try {
@@ -79,7 +74,6 @@ public class DeepSeekElements {
             }
         }
     }
-
 
     public WebElement getSendButtonByRole() {
         return sendButtonByRole;
@@ -104,9 +98,6 @@ public class DeepSeekElements {
     public WebElement getLoadingIndicator() {
         return loadingIndicator;
     }
-
-
-
 
     public WebElement getPromptTextArea() {
         try {
