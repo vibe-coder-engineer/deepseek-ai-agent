@@ -2,18 +2,17 @@ package ru.sibgatulinanton.prompts;
 
 import ru.sibgatulinanton.lang.Language;
 
-import java.io.File;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class PromptLoader {
-    public static final String promptFolder = "resources/prompts";
+    public static final String promptFolder = "prompts";
 
     private final Map<Language, Map<String, String>> prompts = new HashMap<>();
 
@@ -24,21 +23,23 @@ public class PromptLoader {
     private void init() {
         for (Language language : Language.values()) {
             Map<String, String> languagePrompts = new HashMap<>();
-            String languagePath = promptFolder + File.separator + language.name().toLowerCase();
+            String languagePath = promptFolder + "/" + language.name().toLowerCase();
 
             try {
-                Path dirPath = Paths.get(languagePath);
-                if (Files.exists(dirPath) && Files.isDirectory(dirPath)) {
-                    try (DirectoryStream<Path> stream = Files.newDirectoryStream(dirPath, "*.txt")) {
-                        for (Path filePath : stream) {
-                            String fileName = filePath.getFileName().toString();
-                            String promptName = fileName.substring(0, fileName.lastIndexOf('.'));
-                            String content = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8);
-                            languagePrompts.put(promptName, content);
+                ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+                String[] knownPrompts = {"system", "user", "assistant", "first_prompt", "default"};
+                for (String promptName : knownPrompts) {
+                    String fullPath = languagePath + "/" + promptName + ".txt";
+                    try (InputStream is = classLoader.getResourceAsStream(fullPath)) {
+                        if (is != null) {
+                            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                                String content = reader.lines().collect(Collectors.joining("\n"));
+                                languagePrompts.put(promptName, content);
+                            }
                         }
                     }
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
                 System.err.println("Error loading prompts for language " + language + ": " + e.getMessage());
             }
 

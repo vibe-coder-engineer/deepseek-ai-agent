@@ -7,7 +7,6 @@ import ru.sibgatulinanton.os.OSType;
 public class FirstPromptBuilder {
 
     private static final String FIRST_PROMPT_NAME = "first_prompt";
-    private static final String FIRST_PROMPT_PATH = "resources/prompts/ru/first_prompt.txt";
 
     private final PromptLoader promptLoader;
 
@@ -18,7 +17,7 @@ public class FirstPromptBuilder {
     public String build(String task, OSType osType, String currentDir) {
         String firstPromptTemplate = promptLoader.getPrompt(Language.RU, FIRST_PROMPT_NAME);
         if (firstPromptTemplate == null) {
-            throw new IllegalStateException("Prompt template " + FIRST_PROMPT_PATH + " not found");
+            throw new IllegalStateException("Prompt template '" + FIRST_PROMPT_NAME + "' not found for language RU");
         }
 
         String effectiveTask = task == null || task.trim().isEmpty() ? AppConstants.DEFAULT_TASK : task;
