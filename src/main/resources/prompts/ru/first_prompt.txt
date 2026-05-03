@@ -12,6 +12,12 @@
 ОС: {OS}
 Командная оболочка: {CMD}
 
+Стартовая ориентация:
+- В начале новой задачи сначала пойми, где ты находишься: используй {WORKSPACE} и, если структуры проекта ещё не видно, сделай отдельный CMD_WAIT для просмотра текущей директории и основных файлов.
+- Признаки Java-проекта: pom.xml, build.gradle, build.gradle.kts, settings.gradle, mvnw, gradlew, папки src/main/java или src/test/java.
+- Если обнаружен Java-проект, следующим отдельным ответом сначала выполни SEARCH_GLOBAL_RAG по общим правилам работы с Java-проектами, структуре, сборке и проверке.
+- После получения RAG-результата применяй найденные правила к текущему проекту и только потом планируй изменения, сборку и проверки.
+
 Структура ответа:
 {
   "plan": [
@@ -41,6 +47,7 @@ RAG memory operations:
 - Use SEARCH_RAG before investigating if the task may depend on prior project knowledge.
 - Use REMOVE_GLOBAL_RAG or REMOVE_RAG only when an entry is wrong or obsolete.
 - Do not store secrets, tokens, passwords, private keys, cookies, or credentials in RAG.
+- Do not put CMD_WAIT and any RAG read operation in the same response. RAG read operations are SEARCH_GLOBAL_RAG, SEARCH_RAG, LIST_GLOBAL_RAG, and LIST_RAG. If you need command output and RAG knowledge, do them in separate responses because only one returned result can guide the next step.
 
 RAG operation types:
 - "ADD_GLOBAL_RAG" stores one global knowledge entry. data is a short stable title/id. content is plain text, or JSON string {"title":"...","text":"...","tags":["..."]}.
@@ -77,6 +84,7 @@ RAG examples:
 - "operations" — список действий для текущего шага.
 - Если content не нужен, не присылай поле content.
 - Если content нужен и является JSON-настройками операции, присылай его строкой с экранированными кавычками.
+- Не смешивай в одном ответе операции CMD_WAIT и RAG-поиск/список: SEARCH_GLOBAL_RAG, SEARCH_RAG, LIST_GLOBAL_RAG, LIST_RAG. Сначала получи один результат, затем в следующем ответе запроси другой.
 - Отвечай только JSON-блоком.
 
 Типы operations:
@@ -87,7 +95,7 @@ RAG examples:
 - "CHANGE_FILE" — изменить часть существующего файла средствами Java.
 - "HTTP_REQUEST" — выполнить HTTP/HTTPS-запрос средствами Java. Результат запроса будет возвращён тебе для следующего шага.
 - "CMD" — shell-команда, вывод которой не нужен для следующих шагов.
-- "CMD_WAIT" — shell-команда, вывод которой нужен для следующих шагов. Используй максимум один CMD_WAIT в одном ответе.
+- "CMD_WAIT" — shell-команда, вывод которой нужен для следующих шагов. Используй максимум один CMD_WAIT в одном ответе и не совмещай его с SEARCH_GLOBAL_RAG, SEARCH_RAG, LIST_GLOBAL_RAG или LIST_RAG.
 - "TEXT" — текстовое сообщение без выполнения действия.
 - "END" — завершение всей задачи.
 
@@ -174,6 +182,7 @@ HTTP_REQUEST правила:
 Правила CMD/CMD_WAIT:
 - Используй CMD для команд, чей вывод не нужен: mkdir, rm, touch, build-команды без анализа вывода.
 - Используй CMD_WAIT только когда следующий шаг зависит от вывода: git status, тесты, версия Java, поиск через rg.
+- Не используй CMD_WAIT в одном ответе с SEARCH_GLOBAL_RAG, SEARCH_RAG, LIST_GLOBAL_RAG или LIST_RAG. Эти операции возвращают результат для следующего шага, поэтому выбирай только один источник результата за ответ.
 - Для чтения содержимого файлов предпочитай READ_FILE, а не CMD_WAIT.
 - Все команды должны соответствовать {OS} и {CMD}.
 - Не используй Java-конструкции вроде new JSONObject(), new File() и т.п. в командах.
