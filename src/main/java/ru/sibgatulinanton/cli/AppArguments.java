@@ -5,19 +5,27 @@ public class AppArguments {
     private static final String HEADLESS_ARG = "--headless";
     private static final String EXEC_ARG = "--exec";
     private static final String THREAD_ARG = "--thread";
+    private static final String PROFILE_ARG = "--profile";
 
     private final boolean headless;
     private final String execPrompt;
     private final String thread;
+    private final String profile;
 
-    private AppArguments(boolean headless, String execPrompt, String thread) {
+    private AppArguments(boolean headless, String execPrompt, String thread, String profile) {
         this.headless = headless;
         this.execPrompt = execPrompt;
         this.thread = thread;
+        this.profile = profile;
     }
 
     public static AppArguments parse(String[] args) {
-        return new AppArguments(hasArg(args, HEADLESS_ARG), getArgValue(args, EXEC_ARG), getArgValue(args, THREAD_ARG));
+        return new AppArguments(
+                hasArg(args, HEADLESS_ARG),
+                getArgValue(args, EXEC_ARG),
+                getArgValue(args, THREAD_ARG),
+                getArgValue(args, PROFILE_ARG)
+        );
     }
 
     public boolean isHeadless() {
@@ -38,6 +46,10 @@ public class AppArguments {
 
     public boolean hasThread() {
         return thread != null && !thread.trim().isEmpty();
+    }
+
+    public String getProfile() {
+        return profile == null || profile.trim().isEmpty() ? "default" : profile.trim();
     }
 
     private static boolean hasArg(String[] args, String targetArg) {

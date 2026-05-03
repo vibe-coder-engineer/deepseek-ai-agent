@@ -46,6 +46,7 @@ public class App {
 
         logger.info("DeepSeek agent started in console mode");
         logger.info("Browser mode: " + (args.isHeadless() ? "headless" : "headed"));
+        logger.info("Prompt profile: " + args.getProfile());
         if (args.isExecMode()) {
             logger.info("Exec mode enabled");
         }
@@ -64,7 +65,7 @@ public class App {
                 System.exit(0);
             }
 
-            runInteractiveMode(manager, deepSeekPage, runtime, osType);
+            runInteractiveMode(args, manager, deepSeekPage, runtime, osType);
             logger.info("App finished. Press Enter to exit.");
             runtime.input.waitEnter();
         } finally {
@@ -112,14 +113,15 @@ public class App {
         } else {
             manager.openDeepSeek();
             runtime.authGuard.ensureLoggedInOrWait(deepSeekPage, "exec");
-            execPrompt = runtime.promptBuilder.build(args.getExecPrompt(), osType, System.getProperty("user.dir"));
+            execPrompt = runtime.promptBuilder.build(args.getExecPrompt(), osType, System.getProperty("user.dir"), args.getProfile());
         }
 
         manager.driverWait(30);
         runtime.dialogRunner.runUntilEnd(deepSeekPage, execPrompt, args.getExecPrompt(), args.hasThread());
     }
 
-    private void runInteractiveMode(BrowserDriverManager manager,
+    private void runInteractiveMode(AppArguments args,
+                                    BrowserDriverManager manager,
                                     DeepSeekChatPage deepSeekPage,
                                     AppRuntime runtime,
                                     OSType osType) {
@@ -130,7 +132,7 @@ public class App {
         InteractiveState state = new InteractiveState();
         boolean appRunning = true;
         while (appRunning) {
-            prepareDialogState(manager, deepSeekPage, runtime, osType, state);
+            prepareDialogState(args, manager, deepSeekPage, runtime, osType, state);
             if (state.selection == null) {
                 break;
             }
@@ -147,7 +149,8 @@ public class App {
         }
     }
 
-    private void prepareDialogState(BrowserDriverManager manager,
+    private void prepareDialogState(AppArguments args,
+                                    BrowserDriverManager manager,
                                     DeepSeekChatPage deepSeekPage,
                                     AppRuntime runtime,
                                     OSType osType,
@@ -174,7 +177,7 @@ public class App {
         if (state.task.trim().isEmpty()) {
             state.task = AppConstants.DEFAULT_TASK;
         }
-        state.prompt = runtime.promptBuilder.build(state.task, osType, System.getProperty("user.dir"));
+        state.prompt = runtime.promptBuilder.build(state.task, osType, System.getProperty("user.dir"), args.getProfile());
     }
 
     private boolean handlePostDialogAction(BrowserDriverManager manager,

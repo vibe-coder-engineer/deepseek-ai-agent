@@ -177,6 +177,21 @@ Combined with `--headless`:
 java -cp target/classes ru.sibgatulinanton.App --headless --exec "run check" --thread d77812e8-cd6f-471d-abdf-1d23c096e311
 ```
 
+Prompt profile:
+
+```powershell
+java -cp target/classes ru.sibgatulinanton.App --profile java-developer --exec "Add validation"
+```
+
+Available profiles:
+
+- `default`
+- `developer`
+- `java-developer`
+- `architect`
+- `it-analyst`
+- `qa-usability-tester`
+
 Build:
 
 ```powershell

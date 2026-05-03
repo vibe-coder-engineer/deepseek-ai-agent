@@ -27,7 +27,19 @@ public class PromptLoader {
 
             try {
                 ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-                String[] knownPrompts = {"system", "user", "assistant", "first_prompt", "default"};
+                String[] knownPrompts = {
+                        "system",
+                        "user",
+                        "assistant",
+                        "first_prompt",
+                        "default",
+                        "profile_default",
+                        "profile_developer",
+                        "profile_java_developer",
+                        "profile_architect",
+                        "profile_it_analyst",
+                        "profile_qa_usability_tester"
+                };
                 for (String promptName : knownPrompts) {
                     String fullPath = languagePath + "/" + promptName + ".txt";
                     try (InputStream is = classLoader.getResourceAsStream(fullPath)) {
