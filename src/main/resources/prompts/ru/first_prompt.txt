@@ -85,6 +85,7 @@ RAG examples:
 - "CREATE_AND_SAVE_FOLDER" — alias для CREATE_FOLDER.
 - "CREATE_AND_SAVE_FILE" — создать или полностью перезаписать файл средствами Java.
 - "CHANGE_FILE" — изменить часть существующего файла средствами Java.
+- "HTTP_REQUEST" — выполнить HTTP/HTTPS-запрос средствами Java. Результат запроса будет возвращён тебе для следующего шага.
 - "CMD" — shell-команда, вывод которой не нужен для следующих шагов.
 - "CMD_WAIT" — shell-команда, вывод которой нужен для следующих шагов. Используй максимум один CMD_WAIT в одном ответе.
 - "TEXT" — текстовое сообщение без выполнения действия.
@@ -145,6 +146,30 @@ RAG examples:
 - Для локальных правок используй CHANGE_FILE, а не CREATE_AND_SAVE_FILE с полным большим файлом.
 - CREATE_AND_SAVE_FILE используй для новых файлов или когда файл небольшой и действительно нужно перезаписать его целиком.
 - Файловые операции выполняет Java-приложение; не пиши для них Java-код в CMD.
+
+Формат HTTP/HTTPS-запроса:
+{
+  "type": "HTTP_REQUEST",
+  "data": "https://example.com/api/items",
+  "content": "{\"method\":\"GET\",\"headers\":{\"Accept\":\"application/json\"},\"connectTimeoutMillis\":10000,\"readTimeoutMillis\":30000,\"maxBodyChars\":20000}"
+}
+
+HTTP_REQUEST правила:
+- data — полный URL, поддерживаются только протоколы http и https.
+- content — JSON-строка с настройками. Все поля необязательны.
+- method по умолчанию GET. Используй стандартные методы: GET, POST, PUT, DELETE, HEAD, OPTIONS.
+- headers — JSON-объект заголовков, значения могут быть строками или массивами строк.
+- body — строка тела запроса в UTF-8. Для JSON добавляй header Content-Type: application/json.
+- followRedirects по умолчанию true.
+- maxBodyChars ограничивает размер тела ответа, который вернётся тебе.
+- Используй HTTP_REQUEST вместо CMD/CMD_WAIT с curl, wget, Invoke-WebRequest или Invoke-RestMethod, когда нужно сделать HTTP/HTTPS-запрос.
+
+Пример POST:
+{
+  "type": "HTTP_REQUEST",
+  "data": "https://example.com/api/items",
+  "content": "{\"method\":\"POST\",\"headers\":{\"Content-Type\":\"application/json\",\"Accept\":\"application/json\"},\"body\":\"{\\\"name\\\":\\\"test\\\"}\",\"maxBodyChars\":12000}"
+}
 
 Правила CMD/CMD_WAIT:
 - Используй CMD для команд, чей вывод не нужен: mkdir, rm, touch, build-команды без анализа вывода.

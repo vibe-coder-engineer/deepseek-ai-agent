@@ -15,6 +15,7 @@ import ru.sibgatulinanton.deepseek.storage.SessionConsoleController;
 import ru.sibgatulinanton.deepseek.storage.SessionController;
 import ru.sibgatulinanton.deepseek.storage.SessionSelection;
 import ru.sibgatulinanton.files.FileOperationService;
+import ru.sibgatulinanton.http.HttpRequestService;
 import ru.sibgatulinanton.logging.ConsoleLogger;
 import ru.sibgatulinanton.os.OSType;
 import ru.sibgatulinanton.os.OSUtils;
@@ -86,7 +87,8 @@ public class App {
                 commandService,
                 new CommandFailureDetector(),
                 new FileOperationService(workspace),
-                new RagOperationService(workspace)
+                new RagOperationService(workspace),
+                new HttpRequestService()
         );
 
         return new AppRuntime(input,

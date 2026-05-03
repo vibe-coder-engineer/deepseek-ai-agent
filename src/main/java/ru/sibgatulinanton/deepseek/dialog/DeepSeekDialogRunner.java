@@ -7,6 +7,7 @@ import ru.sibgatulinanton.deepseek.DeepSeekAuthGuard;
 import ru.sibgatulinanton.deepseek.DeepSeekChatPage;
 import ru.sibgatulinanton.deepseek.storage.SessionController;
 import ru.sibgatulinanton.files.FileOperationService;
+import ru.sibgatulinanton.http.HttpRequestService;
 import ru.sibgatulinanton.logging.ConsoleLogger;
 import ru.sibgatulinanton.os.cmd.CommandFailureDetector;
 import ru.sibgatulinanton.os.cmd.LocalCommandService;
@@ -27,6 +28,7 @@ public class DeepSeekDialogRunner {
     private final CommandFailureDetector failureDetector;
     private final FileOperationService fileOperationService;
     private final RagOperationService ragOperationService;
+    private final HttpRequestService httpRequestService;
 
     public DeepSeekDialogRunner(ConsoleInput input,
                                 ConsoleLogger logger,
@@ -36,7 +38,8 @@ public class DeepSeekDialogRunner {
                                 LocalCommandService commandService,
                                 CommandFailureDetector failureDetector,
                                 FileOperationService fileOperationService,
-                                RagOperationService ragOperationService) {
+                                RagOperationService ragOperationService,
+                                HttpRequestService httpRequestService) {
         this.input = input;
         this.logger = logger;
         this.authGuard = authGuard;
@@ -46,6 +49,7 @@ public class DeepSeekDialogRunner {
         this.failureDetector = failureDetector;
         this.fileOperationService = fileOperationService;
         this.ragOperationService = ragOperationService;
+        this.httpRequestService = httpRequestService;
     }
 
     public DialogRunResult runUntilEnd(DeepSeekChatPage deepSeekPage, String initialPrompt, String task, boolean resumed) {
@@ -162,12 +166,22 @@ public class DeepSeekDialogRunner {
             return executeRagOperation(type, data, content);
         }
 
+        if ("HTTP_REQUEST".equals(type)) {
+            return executeHttpRequest(data, content);
+        }
+
         if ("TEXT".equals(type)) {
             return OperationResult.continueWithoutPrompt();
         }
 
         logger.warn("Unknown operation type: " + type);
         return OperationResult.continueWithoutPrompt();
+    }
+
+    private OperationResult executeHttpRequest(String data, String content) {
+        String result = httpRequestService.execute(data, content);
+        logger.block("HTTP_REQUEST_RESULT", result);
+        return OperationResult.nextPrompt(result);
     }
 
     private OperationResult executeCommand(String type, String data, String content) {
