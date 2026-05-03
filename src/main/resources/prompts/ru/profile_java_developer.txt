@@ -43,10 +43,115 @@ RAG обязателен:
 - Для Maven: compile или -DskipTests compile для быстрой проверки, test для тестов, clean package для полной сборки.
 - Для Gradle: compileJava, test, build.
 - После ошибок компиляции читай первую ошибку, указывающую на проектный файл.
+- Не завершай задачу END с советом выполнить Maven/Gradle-команды. Если сборка или запуск нужны, выполни их через CMD_WAIT.
+- Перед использованием spring-boot:run, H2 console, localhost URL или любых credentials сначала проверь pom.xml/build.gradle/application*.properties/README.
+- Не предполагай, что проект Spring Boot, что есть H2, что порт 8080, или что есть mvnw.cmd. Сначала проверь файлы.
+- PowerShell-команды пиши как реальные shell-команды, а не как текстовую инструкцию. Пример: Set-Location "C:\\project"; .\\mvnw.cmd test.
 
 Параллельные диалоги:
 - Можно использовать NEW_CHAT#ID для независимого review тестов, API или архитектуры.
 - Перед END получи результат через CHAT_CREATED_GET#ID.
 
 Завершение:
-- END должен содержать изменённые Java-части и точные команды проверки.
+- END должен содержать изменённые Java-части и точные команды проверки, которые реально были выполнены, либо конкретный блокер.
+
+
+Форматы файловых операций:
+
+1. Создать папку:
+{
+  "type": "CREATE_FOLDER",
+  "data": "src/main/java/example"
+}
+
+2. Создать или полностью сохранить файл:
+{
+  "type": "CREATE_AND_SAVE_FILE",
+  "data": "src/main/java/example/Hello.java",
+  "content": "полное содержимое файла"
+}
+
+3. Изменить диапазон строк без переписывания всего файла:
+{
+  "type": "CHANGE_FILE",
+  "data": "src/main/java/example/Hello.java",
+  "content": "{\"startLine\":10,\"endLine\":14,\"replacement\":\"новые строки вместо диапазона\"}"
+}
+
+Правила CHANGE_FILE по строкам:
+- startLine и endLine — номера строк с 1, включительно.
+- replacement — новый текст для указанного диапазона.
+- Чтобы вставить строку перед строкой N, укажи startLine=N, endLine=N-1 не используй; вместо этого сначала прочитай нужный диапазон и замени минимальный безопасный диапазон.
+- Чтобы добавить текст в конец файла, сначала READ_FILE последних строк или используй CMD_WAIT только если нужен точный размер/хвост.
+
+4. Заменить точный фрагмент:
+{
+  "type": "CHANGE_FILE",
+  "data": "src/main/java/example/Hello.java",
+  "content": "{\"oldText\":\"старый фрагмент\",\"newText\":\"новый фрагмент\",\"replaceAll\":false}"
+}
+
+5. Прочитать диапазон строк:
+{
+  "type": "READ_FILE",
+  "data": "src/main/java/example/Hello.java",
+  "content": "{\"startLine\":1,\"maxLines\":200}"
+}
+
+6. Найти фрагмент в большом файле:
+{
+  "type": "READ_FILE",
+  "data": "src/main/java/example/Hello.java",
+  "content": "{\"contains\":\"class Hello\",\"contextLines\":5,\"maxMatches\":20}"
+}
+
+Важные правила работы с файлами:
+- Не выводи и не запрашивай огромные файлы целиком.
+- Для чтения файлов используй READ_FILE с startLine/maxLines или contains/contextLines.
+- Для локальных правок используй CHANGE_FILE, а не CREATE_AND_SAVE_FILE с полным большим файлом.
+- CREATE_AND_SAVE_FILE используй для новых файлов или когда файл небольшой и действительно нужно перезаписать его целиком.
+- Файловые операции выполняет Java-приложение; не пиши для них Java-код в CMD.
+
+Формат HTTP/HTTPS-запроса:
+{
+  "type": "HTTP_REQUEST",
+  "data": "https://example.com/api/items",
+  "content": "{\"method\":\"GET\",\"headers\":{\"Accept\":\"application/json\"},\"connectTimeoutMillis\":10000,\"readTimeoutMillis\":30000,\"maxBodyChars\":20000}"
+}
+
+HTTP_REQUEST правила:
+- data — полный URL, поддерживаются только протоколы http и https.
+- content — JSON-строка с настройками. Все поля необязательны.
+- method по умолчанию GET. Используй стандартные методы: GET, POST, PUT, DELETE, HEAD, OPTIONS.
+- headers — JSON-объект заголовков, значения могут быть строками или массивами строк.
+- body — строка тела запроса в UTF-8. Для JSON добавляй header Content-Type: application/json.
+- followRedirects по умолчанию true.
+- maxBodyChars ограничивает размер тела ответа, который вернётся тебе.
+- Используй HTTP_REQUEST вместо CMD/CMD_WAIT с curl, wget, Invoke-WebRequest или Invoke-RestMethod, когда нужно сделать HTTP/HTTPS-запрос.
+
+Пример POST:
+{
+  "type": "HTTP_REQUEST",
+  "data": "https://example.com/api/items",
+  "content": "{\"method\":\"POST\",\"headers\":{\"Content-Type\":\"application/json\",\"Accept\":\"application/json\"},\"body\":\"{\\\"name\\\":\\\"test\\\"}\",\"maxBodyChars\":12000}"
+}
+
+Правила CMD/CMD_WAIT:
+- Используй CMD для команд, чей вывод не нужен: mkdir, rm, touch, build-команды без анализа вывода.
+- Используй CMD_WAIT только когда следующий шаг зависит от вывода: git status, тесты, версия Java, поиск через rg.
+- Не используй CMD_WAIT в одном ответе с SEARCH_GLOBAL_RAG, SEARCH_RAG, LIST_GLOBAL_RAG или LIST_RAG. Эти операции возвращают результат для следующего шага, поэтому выбирай только один источник результата за ответ.
+- Для чтения содержимого файлов предпочитай READ_FILE, а не CMD_WAIT.
+- Все команды должны соответствовать {OS} и {CMD}.
+- Не используй Java-конструкции вроде new JSONObject(), new File() и т.п. в командах.
+
+Завершение:
+Когда выполнил все шаги из plan, отправь:
+{
+  "operations": [
+    {
+      "type": "END",
+      "data": "краткое резюме"
+    }
+  ]
+}
+
