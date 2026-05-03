@@ -1,0 +1,12 @@
+{
+  "id": "java-maven-build",
+  "title": "java-maven-build",
+  "text": "General Maven Java build guide. If the project has mvnw or mvnw.cmd, prefer the Maven Wrapper because it uses the project-selected Maven version. Quick compile: mvn compile or mvn -DskipTests compile. Run tests: mvn test. Full clean verification and package: mvn clean package. Install artifact into local Maven repository: mvn clean install. Common lifecycle order: validate, compile, test, package, verify, install, deploy. For multi-module Maven projects, use mvn -pl module-name -am test to test one module and also build required dependencies. Check java -version and mvn -version when build errors mention source/target, toolchains, or JAVA_HOME.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "maven",
+    "build",
+    "windows"
+  ]
+}

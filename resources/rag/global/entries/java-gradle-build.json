@@ -1,0 +1,12 @@
+{
+  "id": "java-gradle-build",
+  "title": "java-gradle-build",
+  "text": "Gradle Java build checks. If gradlew exists, prefer .\\gradlew.bat on Windows or ./gradlew on Unix. Use .\\gradlew.bat compileJava for a quick compile check when available. Use .\\gradlew.bat test for unit tests. Use .\\gradlew.bat build for full verification. For multi-project builds, use :module:test or :module:build. If dependencies are missing and network is restricted, report that dependency download is blocked instead of guessing.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "gradle",
+    "build",
+    "windows"
+  ]
+}

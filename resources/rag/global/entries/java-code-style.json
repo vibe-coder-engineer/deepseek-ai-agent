@@ -1,0 +1,11 @@
+{
+  "id": "java-code-style",
+  "title": "java-code-style",
+  "text": "Java coding rules. Keep code simple and explicit. Use meaningful names. Prefer dependency injection and small methods when the project already follows that style. Keep package names consistent with existing source layout. Use standard library APIs before adding dependencies. Avoid broad catch blocks unless the boundary must convert exceptions. Preserve checked exception behavior unless intentionally changing the contract. Add comments only for non-obvious decisions. Do not store secrets in source code, logs, tests, or RAG.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "style",
+    "best-practices"
+  ]
+}

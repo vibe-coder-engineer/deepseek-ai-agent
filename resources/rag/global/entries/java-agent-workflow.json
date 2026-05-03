@@ -1,0 +1,11 @@
+{
+  "id": "java-agent-workflow",
+  "title": "java-agent-workflow",
+  "text": "Default workflow for Java coding tasks. First inspect the project structure and build files before editing. Read pom.xml, build.gradle, README, package layout, and the affected classes. Prefer the project's existing style and dependencies. Make small focused changes. Do not rewrite unrelated code. After edits, compile and run the smallest useful tests. If a test fails, read the failure, fix the real cause, and rerun the relevant verification. Finish only after explaining what changed and which checks passed.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "workflow",
+    "coding"
+  ]
+}

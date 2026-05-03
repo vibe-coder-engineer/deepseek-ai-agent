@@ -29,6 +29,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -54,6 +55,10 @@ public class RagOperationService {
     private static final int RELATED_LIMIT = 4;
 
     private static final String SCOPE_GLOBAL = "global";
+    private static final Path GLOBAL_SEED_ENTRIES_FOLDER = Paths.get("resources")
+            .resolve("rag")
+            .resolve("global")
+            .resolve("entries");
 
     private final Path defaultWorkspace;
     private final Path globalEntriesFolder;
@@ -253,6 +258,27 @@ public class RagOperationService {
 
     private void ensureStorage(Path entriesFolder) throws IOException {
         Files.createDirectories(entriesFolder);
+        seedGlobalStorage(entriesFolder);
+    }
+
+    private void seedGlobalStorage(Path entriesFolder) throws IOException {
+        if (!entriesFolder.equals(globalEntriesFolder)) {
+            return;
+        }
+
+        Path seedFolder = defaultWorkspace.resolve(GLOBAL_SEED_ENTRIES_FOLDER).toAbsolutePath().normalize();
+        if (!Files.isDirectory(seedFolder)) {
+            return;
+        }
+
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(seedFolder, "*.json")) {
+            for (Path seedEntry : stream) {
+                Path target = entriesFolder.resolve(seedEntry.getFileName());
+                if (!Files.exists(target)) {
+                    Files.copy(seedEntry, target, StandardCopyOption.COPY_ATTRIBUTES);
+                }
+            }
+        }
     }
 
     private Path entriesFolderFor(JsonNode options) {

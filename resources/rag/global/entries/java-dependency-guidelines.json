@@ -1,0 +1,12 @@
+{
+  "id": "java-dependency-guidelines",
+  "title": "java-dependency-guidelines",
+  "text": "Java dependency guidelines. Use existing project dependencies before adding new ones. For Maven, dependencies are declared in pom.xml and may be managed by dependencyManagement or a parent pom. For Gradle, dependencies are declared in build.gradle or build.gradle.kts and versions may come from a version catalog, platform, or plugin. Keep test-only libraries in test scope or testImplementation. Do not add large frameworks for small utility logic. After changing dependencies, run a build command that resolves dependencies and compiles tests.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "dependencies",
+    "maven",
+    "gradle"
+  ]
+}

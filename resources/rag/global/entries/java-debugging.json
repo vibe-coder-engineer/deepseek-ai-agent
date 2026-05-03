@@ -1,0 +1,11 @@
+{
+  "id": "java-debugging",
+  "title": "java-debugging",
+  "text": "Java debugging checklist. Read the full stack trace from the first caused-by block that points into project code. Check null values, path assumptions, encoding, classpath resources, dependency versions, and OS-specific commands. For Maven or Gradle failures, separate dependency resolution errors from compile errors and test failures. For Selenium failures, check browser version, driver version, selector changes, timeouts, and authentication state. Prefer fixing the smallest failing boundary instead of adding sleeps or broad retries.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "debugging",
+    "selenium"
+  ]
+}

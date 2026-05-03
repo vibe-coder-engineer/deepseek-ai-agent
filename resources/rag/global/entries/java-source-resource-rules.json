@@ -1,0 +1,12 @@
+{
+  "id": "java-source-resource-rules",
+  "title": "java-source-resource-rules",
+  "text": "Java source and resource rules. Java classes belong in src/main/java under a folder path matching their package declaration. Runtime resource files belong in src/main/resources and are usually loaded from the classpath, not by hardcoded source-tree paths. Test classes belong in src/test/java and usually mirror the package of the production class under test. Test fixtures belong in src/test/resources. Keep platform-specific paths out of core logic when possible; use Path, Paths, Files, and classpath resource loading.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "resources",
+    "classpath",
+    "tests"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "java-testing-verification",
+  "title": "java-testing-verification",
+  "text": "How to verify Java work. For syntax and type errors, run compile first. For behavior changes, add or update focused unit tests and run them. For bug fixes, reproduce the failure when possible, then confirm the same check passes after the fix. For command line apps, run the main class or packaged jar with a small safe input. For web or Selenium code, verify the driver path, browser availability, and login/session requirements. Always report exact commands run and whether they passed or why they could not be run.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "tests",
+    "verification"
+  ]
+}

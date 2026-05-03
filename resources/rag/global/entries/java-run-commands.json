@@ -1,0 +1,12 @@
+{
+  "id": "java-run-commands",
+  "title": "java-run-commands",
+  "text": "General ways to run Java projects. For Maven projects with an application plugin, README may define mvn spring-boot:run, mvn exec:java, or another plugin command. For Gradle projects, common commands are gradlew run or gradlew bootRun. To run a compiled main class manually, use java -cp target/classes com.example.Main for Maven output or java -cp build/classes/java/main com.example.Main for Gradle output. To run a packaged executable jar, use java -jar path/to/app.jar. For Spring Boot jars, the packaged jar is usually executable after mvn package or gradlew bootJar.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "run",
+    "jar",
+    "main-class"
+  ]
+}

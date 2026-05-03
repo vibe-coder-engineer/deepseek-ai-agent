@@ -1,0 +1,12 @@
+{
+  "id": "java-build-tool-detection",
+  "title": "java-build-tool-detection",
+  "text": "How to detect and choose Java build commands. If pom.xml exists, it is usually Maven. If build.gradle, build.gradle.kts, or settings.gradle exists, it is usually Gradle. If mvnw or mvnw.cmd exists, prefer the Maven Wrapper. If gradlew or gradlew.bat exists, prefer the Gradle Wrapper. If there is no build tool, inspect README and source layout; small projects can be compiled with javac, but real projects should normally be checked with Maven or Gradle. Before changing dependencies, inspect the build file and existing dependency style.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "build",
+    "maven",
+    "gradle"
+  ]
+}

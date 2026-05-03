@@ -1,0 +1,12 @@
+{
+  "id": "java-project-structure",
+  "title": "java-project-structure",
+  "text": "Common Java project structure. Maven and Gradle usually use src/main/java for production Java source, src/main/resources for production resources, src/test/java for tests, and src/test/resources for test resources. Package folders mirror the package name, for example package com.example.app lives under src/main/java/com/example/app. Build files are pom.xml for Maven and build.gradle or build.gradle.kts plus settings.gradle for Gradle. Generated build output usually goes to target for Maven and build for Gradle. Do not edit generated output; edit source files and resources.",
+  "createdAt": "2026-05-03T00:00:00.000+0000",
+  "tags": [
+    "java",
+    "structure",
+    "maven",
+    "gradle"
+  ]
+}
