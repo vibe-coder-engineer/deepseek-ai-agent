@@ -13,7 +13,9 @@ import ru.sibgatulinanton.os.cmd.CommandFailureDetector;
 import ru.sibgatulinanton.os.cmd.LocalCommandService;
 import ru.sibgatulinanton.rag.RagOperationService;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class DeepSeekDialogRunner {
 
@@ -29,6 +31,7 @@ public class DeepSeekDialogRunner {
     private final FileOperationService fileOperationService;
     private final RagOperationService ragOperationService;
     private final HttpRequestService httpRequestService;
+    private final Map<String, ParallelChat> parallelChats = new LinkedHashMap<String, ParallelChat>();
 
     public DeepSeekDialogRunner(ConsoleInput input,
                                 ConsoleLogger logger,
@@ -84,7 +87,7 @@ public class DeepSeekDialogRunner {
                 continue;
             }
 
-            OperationResult result = executeOperations(operations);
+            OperationResult result = executeOperations(deepSeekPage, operations);
             isEnd = result.isEnd();
             promptExists = result.hasNextPrompt();
             if (promptExists) {
@@ -133,10 +136,10 @@ public class DeepSeekDialogRunner {
         return currentChatId;
     }
 
-    private OperationResult executeOperations(List<AiOperation> operations) {
+    private OperationResult executeOperations(DeepSeekChatPage deepSeekPage, List<AiOperation> operations) {
         OperationResult result = OperationResult.continueWithoutPrompt();
         for (AiOperation operation : operations) {
-            result = executeOperation(operation);
+            result = executeOperation(deepSeekPage, operation);
             if (result.isEnd() || result.hasNextPrompt()) {
                 return result;
             }
@@ -144,7 +147,7 @@ public class DeepSeekDialogRunner {
         return result;
     }
 
-    private OperationResult executeOperation(AiOperation operation) {
+    private OperationResult executeOperation(DeepSeekChatPage deepSeekPage, AiOperation operation) {
         String type = operation.getType();
         String data = operation.getData();
         String content = operation.getContent();
@@ -170,12 +173,124 @@ public class DeepSeekDialogRunner {
             return executeHttpRequest(data, content);
         }
 
+        if (isNewChatOperation(type)) {
+            return executeNewChat(deepSeekPage, type, data, content);
+        }
+
+        if (isChatCreatedGetOperation(type)) {
+            return executeChatCreatedGet(deepSeekPage, type, data);
+        }
+
         if ("TEXT".equals(type)) {
             return OperationResult.continueWithoutPrompt();
         }
 
         logger.warn("Unknown operation type: " + type);
         return OperationResult.continueWithoutPrompt();
+    }
+
+    private boolean isNewChatOperation(String type) {
+        return type != null && ("NEW_CHAT".equals(type) || type.startsWith("NEW_CHAT#"));
+    }
+
+    private boolean isChatCreatedGetOperation(String type) {
+        return type != null && ("CHAT_CREATED_GET".equals(type) || type.startsWith("CHAT_CREATED_GET#"));
+    }
+
+    private OperationResult executeNewChat(DeepSeekChatPage deepSeekPage, String type, String data, String content) {
+        String id = operationId(type, data, "NEW_CHAT");
+        if (id.isEmpty()) {
+            String error = "PARALLEL_CHAT_ERROR\nNEW_CHAT\nERROR: id is empty";
+            logger.block("PARALLEL_CHAT_RESULT", error);
+            return OperationResult.nextPrompt(error);
+        }
+        if (content == null || content.trim().isEmpty()) {
+            String error = "PARALLEL_CHAT_ERROR\nNEW_CHAT\nID: " + id + "\nERROR: content prompt is empty";
+            logger.block("PARALLEL_CHAT_RESULT", error);
+            return OperationResult.nextPrompt(error);
+        }
+        if (parallelChats.containsKey(id)) {
+            String error = "PARALLEL_CHAT_ERROR\nNEW_CHAT\nID: " + id + "\nERROR: id already exists";
+            logger.block("PARALLEL_CHAT_RESULT", error);
+            return OperationResult.nextPrompt(error);
+        }
+
+        String parentHandle = deepSeekPage.getCurrentWindowHandle();
+        try {
+            String childHandle = deepSeekPage.openNewDeepSeekTab();
+            authGuard.ensureLoggedInOrWait(deepSeekPage, "parallel chat " + id);
+            deepSeekPage.startDeepSeekRequest(content);
+            parallelChats.put(id, new ParallelChat(id, childHandle, content));
+            deepSeekPage.switchToWindow(parentHandle);
+
+            String result = "PARALLEL_CHAT_STARTED\nID: " + id + "\nSTATUS: RUNNING\nHANDLE: " + childHandle;
+            logger.block("PARALLEL_CHAT_RESULT", result);
+            return OperationResult.continueWithoutPrompt();
+        } catch (RuntimeException e) {
+            try {
+                deepSeekPage.switchToWindow(parentHandle);
+            } catch (RuntimeException ignored) {
+            }
+            String error = "PARALLEL_CHAT_ERROR\nNEW_CHAT\nID: " + id + "\nERROR: " + safeMessage(e);
+            logger.block("PARALLEL_CHAT_RESULT", error);
+            return OperationResult.nextPrompt(error);
+        }
+    }
+
+    private OperationResult executeChatCreatedGet(DeepSeekChatPage deepSeekPage, String type, String data) {
+        String id = operationId(type, data, "CHAT_CREATED_GET");
+        ParallelChat chat = parallelChats.get(id);
+        if (chat == null) {
+            String error = "PARALLEL_CHAT_ERROR\nCHAT_CREATED_GET\nID: " + id + "\nERROR: chat not found";
+            logger.block("PARALLEL_CHAT_RESULT", error);
+            return OperationResult.nextPrompt(error);
+        }
+
+        String parentHandle = deepSeekPage.getCurrentWindowHandle();
+        try {
+            deepSeekPage.switchToWindow(chat.windowHandle);
+            deepSeekPage.waitForResponseComplete();
+            String response = deepSeekPage.getResponse();
+            chat.status = "COMPLETED";
+            chat.response = response == null ? "" : response;
+            chat.chatId = deepSeekPage.getChatIdFromCurrentUrl();
+            chat.url = deepSeekPage.getCurrentUrl();
+            deepSeekPage.switchToWindow(parentHandle);
+
+            String result = "CHAT_CREATED_GET#" + id + "\n"
+                    + "STATUS: OK\n"
+                    + "CHAT_STATUS: " + chat.status + "\n"
+                    + "CHAT_ID: " + emptyToPlaceholder(chat.chatId) + "\n"
+                    + "URL: " + emptyToPlaceholder(chat.url) + "\n"
+                    + "RESPONSE:\n" + chat.response;
+            logger.block("PARALLEL_CHAT_RESULT", result);
+            return OperationResult.nextPrompt(result);
+        } catch (RuntimeException e) {
+            try {
+                deepSeekPage.switchToWindow(parentHandle);
+            } catch (RuntimeException ignored) {
+            }
+            chat.status = "FAILED";
+            chat.response = safeMessage(e);
+            String error = "CHAT_CREATED_GET#" + id + "\nSTATUS: FAILED\nERROR: " + chat.response;
+            logger.block("PARALLEL_CHAT_RESULT", error);
+            return OperationResult.nextPrompt(error);
+        }
+    }
+
+    private String operationId(String type, String data, String prefix) {
+        if (type != null && type.startsWith(prefix + "#")) {
+            return type.substring((prefix + "#").length()).trim();
+        }
+        return data == null ? "" : data.trim();
+    }
+
+    private String safeMessage(RuntimeException e) {
+        return e.getMessage() == null ? e.toString() : e.getMessage();
+    }
+
+    private String emptyToPlaceholder(String value) {
+        return value == null || value.trim().isEmpty() ? "<empty>" : value;
     }
 
     private OperationResult executeHttpRequest(String data, String content) {
@@ -299,6 +414,23 @@ public class DeepSeekDialogRunner {
 
         String getNextPrompt() {
             return nextPrompt;
+        }
+    }
+
+    private static class ParallelChat {
+
+        private final String id;
+        private final String windowHandle;
+        private final String prompt;
+        private String status = "RUNNING";
+        private String response = "";
+        private String chatId = "";
+        private String url = "";
+
+        ParallelChat(String id, String windowHandle, String prompt) {
+            this.id = id;
+            this.windowHandle = windowHandle;
+            this.prompt = prompt;
         }
     }
 }

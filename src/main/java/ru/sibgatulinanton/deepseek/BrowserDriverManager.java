@@ -1,6 +1,7 @@
 package ru.sibgatulinanton.deepseek;
 
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WindowType;
 import org.openqa.selenium.edge.EdgeDriver;
 import org.openqa.selenium.edge.EdgeOptions;
 import org.openqa.selenium.support.ui.WebDriverWait;
@@ -85,6 +86,30 @@ public class BrowserDriverManager {
         }
 
         driver.get(url);
+    }
+
+    public String getCurrentWindowHandle() {
+        if (driver == null) {
+            throw new IllegalStateException("Driver not initialized");
+        }
+        return driver.getWindowHandle();
+    }
+
+    public String openNewTab(String url) {
+        if (driver == null) {
+            throw new IllegalStateException("Driver not initialized");
+        }
+        driver.switchTo().newWindow(WindowType.TAB);
+        String handle = driver.getWindowHandle();
+        driver.get(url);
+        return handle;
+    }
+
+    public void switchToWindow(String handle) {
+        if (driver == null) {
+            throw new IllegalStateException("Driver not initialized");
+        }
+        driver.switchTo().window(handle);
     }
 
     public void quit() {

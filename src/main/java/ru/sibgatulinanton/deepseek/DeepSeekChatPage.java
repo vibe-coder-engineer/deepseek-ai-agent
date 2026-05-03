@@ -408,6 +408,18 @@ public class DeepSeekChatPage {
         }
     }
 
+    public String getCurrentWindowHandle() {
+        return browserManager.getCurrentWindowHandle();
+    }
+
+    public String openNewDeepSeekTab() {
+        return browserManager.openNewTab(BrowserDriverManager.CHAT_DEEPSEEK_LINK);
+    }
+
+    public void switchToWindow(String handle) {
+        browserManager.switchToWindow(handle);
+    }
+
     public String getChatIdFromCurrentUrl() {
         String currentUrl = getCurrentUrl();
         if (currentUrl == null || currentUrl.trim().isEmpty()) {
@@ -434,6 +446,18 @@ public class DeepSeekChatPage {
         waitForResponseComplete();
 
         return getResponse();
+    }
+
+    public void startDeepSeekRequest(String prompt) {
+        if (!isUserLoggedIn()) {
+            throw new RuntimeException("User is not authorized in DeepSeek");
+        }
+
+        lastResponseCount = getCurrentResponseCount();
+        System.out.println("[INFO] Sending background prompt. currentResponseCount=" + lastResponseCount);
+
+        sendPromptWithEnter(prompt);
+        waitForResponseStarted();
     }
 
     private void sleep(long millis) {
